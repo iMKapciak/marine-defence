@@ -1,85 +1,128 @@
 import Phaser from 'phaser';
-import { Player } from './Player';
+import MainScene from '../scenes/MainScene';
+import { BaseUnit } from './units/BaseUnit';
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
+    public scene: MainScene;
     private health: number;
+    private maxHealth: number;
     private speed: number;
     private experienceValue: number;
-    private damage: number;
-    private player: Player;
+    private healthBar: Phaser.GameObjects.Graphics;
 
-    constructor(scene: Phaser.Scene, x: number, y: number, wave: number) {
+    constructor(scene: MainScene, x: number, y: number, level: number) {
         super(scene, x, y, 'enemy');
+        this.scene = scene;
+        
+        // Add to scene and enable physics
         scene.add.existing(this);
         scene.physics.add.existing(this);
+        
+        // Set enemy properties based on level
+        this.maxHealth = 50 * level;
+        this.health = this.maxHealth;
+        this.speed = 100 + (level * 10);
+        this.experienceValue = 10 * level;
+        
+        // Set the size for physics body
+        this.setCircle(10);
 
-        // Scale stats with wave number
-        this.health = 50 + wave * 10;
-        this.speed = 100 + wave * 5;
-        this.experienceValue = 10 + wave * 5;
-        this.damage = 10 + wave * 2;
-
-        // Find the player reference
-        this.player = (scene as any).player;
-
-        // Set up collision detection
-        scene.physics.add.overlap(
-            this,
-            (scene as any).player.bullets,
-            this.onBulletHit,
-            undefined,
-            this
-        );
-
-        scene.physics.add.overlap(
-            this,
-            (scene as any).player,
-            this.onPlayerCollision,
-            undefined,
-            this
-        );
+        // Create health bar
+        this.healthBar = scene.add.graphics();
+        this.updateHealthBar();
     }
 
-    update() {
+    public takeDamage(damage: number): void {
         if (!this.active) return;
+        
+        console.log(`Enemy taking ${damage} damage. Current health: ${this.health}`);
+        this.health = Math.max(0, this.health - damage);
+        this.updateHealthBar();
+        
+        // Flash red when hit
+        this.setTint(0xff0000);
+        this.scene.time.delayedCall(100, () => {
+            if (this.active) {
+                this.clearTint();
+            }
+        });
 
-        // Move towards player
-        const angle = Phaser.Math.Angle.Between(
-            this.x, this.y,
-            this.player.x, this.player.y
-        );
-
-        const velocity = this.scene.physics.velocityFromAngle(
-            Phaser.Math.RadToDeg(angle),
-            this.speed
-        );
-
-        this.setVelocity(velocity.x, velocity.y);
-    }
-
-    private onBulletHit(enemy: Enemy, bullet: Phaser.Physics.Arcade.Sprite) {
-        bullet.setActive(false);
-        bullet.setVisible(false);
-        this.damage(20); // Bullet damage
-    }
-
-    private onPlayerCollision(enemy: Enemy, player: Player) {
-        player.damage(this.damage);
-    }
-
-    public damage(amount: number) {
-        this.health -= amount;
         if (this.health <= 0) {
-            this.die();
+            console.log('Enemy destroyed');
+            this.scene.removeEnemy(this);
+            this.destroy();
         }
     }
 
-    private die() {
-        (this.scene as any).removeEnemy(this);
-        this.destroy();
+    private updateHealthBar(): void {
+        if (!this.active || !this.healthBar) return;
+
+        this.healthBar.clear();
+
+        // Draw background (gray)
+        this.healthBar.fillStyle(0x808080);
+        this.healthBar.fillRect(this.x - 15, this.y - 20, 30, 5);
+
+        // Draw health (red)
+        const healthWidth = (this.health / this.maxHealth) * 30;
+        this.healthBar.fillStyle(0xff0000);
+        this.healthBar.fillRect(this.x - 15, this.y - 20, healthWidth, 5);
+    }
+
+    update(): void {
+        if (!this.active) return;
+
+        // Get all possible targets (player and friendly units)
+        const targets: (Phaser.GameObjects.GameObject & { x: number; y: number })[] = [
+            this.scene.player,
+            ...this.scene.getFriendlyUnits()
+        ];
+
+        // Find the closest target
+        let closestTarget = targets[0];
+        let closestDistance = Phaser.Math.Distance.Between(
+            this.x, this.y,
+            closestTarget.x, closestTarget.y
+        );
+
+        for (let i = 1; i < targets.length; i++) {
+            const target = targets[i];
+            if (!target.active) continue; // Skip destroyed targets
+
+            const distance = Phaser.Math.Distance.Between(
+                this.x, this.y,
+                target.x, target.y
+            );
+
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestTarget = target;
+            }
+        }
+
+        // Move towards the closest target
+        const angle = Phaser.Math.Angle.Between(
+            this.x, this.y,
+            closestTarget.x, closestTarget.y
+        );
+
+        const velocityX = Math.cos(angle) * this.speed;
+        const velocityY = Math.sin(angle) * this.speed;
+        
+        this.setVelocity(velocityX, velocityY);
+
+        // Update health bar position
+        this.updateHealthBar();
     }
 
     public getExperienceValue(): number {
         return this.experienceValue;
+    }
+
+    public destroy(fromScene?: boolean): void {
+        if (this.healthBar) {
+            this.healthBar.destroy();
+        }
+        super.destroy(fromScene);
     }
 } 

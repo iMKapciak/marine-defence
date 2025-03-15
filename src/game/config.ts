@@ -8,8 +8,8 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     physics: {
         default: 'arcade',
         arcade: {
-            gravity: { y: 0 },
-            debug: false
+            gravity: { x: 0, y: 0 },
+            debug: true // Enable debug mode temporarily to see physics bodies
         }
     },
     scene: MainScene,
