@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PlayerClass } from '../scenes/LobbyScene';
+import { PlayerClass } from '../types/PlayerData';
 
 interface ClassInfo {
     name: PlayerClass;

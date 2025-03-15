@@ -1,21 +1,7 @@
 import Phaser from 'phaser';
 import { SquadPanel } from '../ui/SquadPanel';
 import { ClassPanel } from '../ui/ClassPanel';
-
-export enum PlayerClass {
-    HEAVY = 'HEAVY',
-    SPEEDY = 'SPEEDY',
-    ASSAULT = 'ASSAULT',
-    ENGINEER = 'ENGINEER'
-}
-
-export interface PlayerData {
-    id: string;
-    name: string;
-    class: PlayerClass;
-    isReady: boolean;
-    isHost: boolean;
-}
+import { PlayerClass, PlayerData } from '../types/PlayerData';
 
 export class LobbyScene extends Phaser.Scene {
     private squadPanel: SquadPanel;
@@ -144,11 +130,12 @@ export class LobbyScene extends Phaser.Scene {
     }
 
     private startGame() {
-        // TODO: Implement game start logic
-        // This will transition to the main game scene
-        console.log('Starting game with players:', Array.from(this.players.values()));
+        // Filter out only ready players
+        const readyPlayers = Array.from(this.players.values()).filter(player => player.isReady);
+        
+        // Start the main scene with only ready players
         this.scene.start('MainScene', {
-            players: Array.from(this.players.values())
+            players: readyPlayers
         });
     }
 

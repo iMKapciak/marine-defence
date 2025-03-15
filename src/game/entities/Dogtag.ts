@@ -3,10 +3,11 @@ import MainScene from '../scenes/MainScene';
 import { BaseUnit } from './units/BaseUnit';
 
 export class Dogtag extends Phaser.Physics.Arcade.Sprite {
-    protected scene: MainScene;
+    public scene: MainScene;
     private fallenUnit: BaseUnit;
     private respawnTimer: number = 10000; // 10 seconds
     private isCollected: boolean = false;
+    private respawnTimerEvent?: Phaser.Time.TimerEvent;
 
     constructor(scene: MainScene, x: number, y: number, fallenUnit: BaseUnit) {
         super(scene, x, y, 'dogtag');
@@ -81,16 +82,30 @@ export class Dogtag extends Phaser.Physics.Arcade.Sprite {
             onComplete: () => {
                 console.log('Starting respawn timer for', this.respawnTimer, 'ms');
                 // Start respawn timer
-                sceneRef.time.delayedCall(this.respawnTimer, () => {
-                    console.log('Respawn timer completed, attempting to respawn unit');
-                    this.respawnUnitWithRefs(sceneRef, unitRef);
+                this.respawnTimerEvent = sceneRef.time.delayedCall(this.respawnTimer, () => {
+                    // Check if scene is still active before respawning
+                    if (sceneRef && sceneRef.scene.isActive()) {
+                        console.log('Respawn timer completed, attempting to respawn unit');
+                        this.respawnUnitWithRefs(sceneRef, unitRef);
+                    } else {
+                        console.log('Scene is no longer active, canceling respawn');
+                    }
+                    // Only destroy the dogtag after respawn attempt
+                    this.destroy();
                 });
-                this.destroy();
+                // Don't destroy the dogtag here anymore
+                this.setVisible(false); // Just hide it instead
             }
         });
     }
 
     private respawnUnitWithRefs(scene: MainScene, unit: BaseUnit): void {
+        // Check if scene is still active
+        if (!scene || !scene.scene.isActive()) {
+            console.log('Cannot respawn unit: Scene is not active');
+            return;
+        }
+
         // Get a safe spawn position near the player
         const player = scene.getPlayer();
         if (!player) {
@@ -108,5 +123,18 @@ export class Dogtag extends Phaser.Physics.Arcade.Sprite {
         
         // Respawn the unit
         scene.respawnUnit(unit, x, y);
+    }
+
+    public isRespawnPending(): boolean {
+        return this.isCollected && !!this.respawnTimerEvent && !this.respawnTimerEvent.hasDispatched;
+    }
+
+    destroy(fromScene?: boolean): void {
+        // Clear the respawn timer if it exists
+        if (this.respawnTimerEvent) {
+            this.respawnTimerEvent.destroy();
+            this.respawnTimerEvent = undefined;
+        }
+        super.destroy(fromScene);
     }
 } 

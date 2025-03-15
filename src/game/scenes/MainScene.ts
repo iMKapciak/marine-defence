@@ -10,6 +10,7 @@ import { SupportEngineer } from '../entities/units/SupportEngineer';
 import { Bullet } from '../entities/Bullet';
 import { Minimap } from '../ui/Minimap';
 import { Dogtag } from '../entities/Dogtag';
+import { PlayerData, PlayerClass } from '../types/PlayerData';
 
 export default class MainScene extends Phaser.Scene {
     public player!: Player;
@@ -33,6 +34,7 @@ export default class MainScene extends Phaser.Scene {
 
     private dogtags: Phaser.Physics.Arcade.Group;
     private respawningUnits: Map<BaseUnit, number> = new Map();
+    private selectedPlayers: PlayerData[] = [];
 
     // Add getters for minimap
     public getWorldWidth(): number {
@@ -58,6 +60,11 @@ export default class MainScene extends Phaser.Scene {
 
     constructor() {
         super({ key: 'MainScene' });
+    }
+
+    init(data: { players: PlayerData[] }) {
+        // Store selected players data
+        this.selectedPlayers = data.players;
     }
 
     preload() {
@@ -210,7 +217,16 @@ export default class MainScene extends Phaser.Scene {
         this.physics.add.overlap(
             this.player.bullets,
             this.enemies,
-            this.handleBulletEnemyCollision,
+            (obj1, obj2) => {
+                const gameObj1 = (obj1 as Phaser.GameObjects.GameObject);
+                const gameObj2 = (obj2 as Phaser.GameObjects.GameObject);
+                
+                if (gameObj1 instanceof Bullet && gameObj2 instanceof Enemy) {
+                    this.handleBulletEnemyCollision(gameObj1, gameObj2);
+                } else if (gameObj1 instanceof Enemy && gameObj2 instanceof Bullet) {
+                    this.handleBulletEnemyCollision(gameObj2, gameObj1);
+                }
+            },
             undefined,
             this
         );
@@ -224,23 +240,35 @@ export default class MainScene extends Phaser.Scene {
         this.physics.add.overlap(
             this.enemies,
             this.player,
-            (enemyObj: any, playerObj: any) => {
-                this.handleEnemyCollision(enemyObj as Enemy, playerObj as Player);
+            (obj1, obj2) => {
+                const gameObj1 = (obj1 as Phaser.GameObjects.GameObject);
+                const gameObj2 = (obj2 as Phaser.GameObjects.GameObject);
+                
+                if (gameObj1 instanceof Enemy && gameObj2 instanceof Player) {
+                    this.handleEnemyCollision(gameObj1, gameObj2);
+                }
             },
             undefined,
             this
         );
 
-        // Add collision between enemies and friendly units
-        this.physics.add.overlap(
-            this.enemies,
-            this.friendlyUnits,
-            (enemyObj: any, unitObj: any) => {
-                this.handleEnemyCollision(enemyObj as Enemy, unitObj as BaseUnit);
-            },
-            undefined,
-            this
-        );
+        // Set up collision between enemies and friendly units
+        this.friendlyUnits.forEach(unit => {
+            this.physics.add.overlap(
+                this.enemies,
+                unit,
+                (obj1, obj2) => {
+                    const gameObj1 = (obj1 as Phaser.GameObjects.GameObject);
+                    const gameObj2 = (obj2 as Phaser.GameObjects.GameObject);
+                    
+                    if (gameObj1 instanceof Enemy && gameObj2 instanceof BaseUnit) {
+                        this.handleEnemyCollision(gameObj1, gameObj2);
+                    }
+                },
+                undefined,
+                this
+            );
+        });
 
         // Add wave text
         this.waveText = this.add.text(16, 16, `Wave: ${this.wave}`, {
@@ -289,31 +317,15 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-    private handleBulletEnemyCollision(obj1: Phaser.GameObjects.GameObject, obj2: Phaser.GameObjects.GameObject): void {
-        console.log('Collision detected between:', obj1, obj2);
-        
-        // Determine which object is the bullet and which is the enemy
-        let bullet: Bullet | null = null;
-        let enemy: Enemy | null = null;
-
-        if (obj1 instanceof Bullet && obj2 instanceof Enemy) {
-            bullet = obj1;
-            enemy = obj2;
-        } else if (obj1 instanceof Enemy && obj2 instanceof Bullet) {
-            bullet = obj2;
-            enemy = obj1;
-        }
-
-        // If we couldn't identify the objects, or either is inactive, return
+    private handleBulletEnemyCollision(bullet: Bullet, enemy: Enemy): void {
         if (!bullet?.active || !enemy?.active) {
-            console.log('Bullet or enemy is inactive or not properly identified');
+            console.log('Bullet or enemy is inactive');
             return;
         }
 
         console.log('Applying damage to enemy');
         
         try {
-            // Apply damage and deactivate bullet
             const damage = bullet.getDamage();
             enemy.takeDamage(damage);
             bullet.setActive(false);
@@ -386,19 +398,42 @@ export default class MainScene extends Phaser.Scene {
     }
 
     private createTestUnits() {
-        // Create units around the player's starting position
+        // Get center position
         const centerX = this.WORLD_WIDTH / 2;
         const centerY = this.WORLD_HEIGHT / 2;
         
-        this.friendlyUnits.push(
-            new HeavyShieldUnit(this, centerX - 100, centerY - 100),
-            new SpeedyLightUnit(this, centerX + 100, centerY - 100),
-            new AssaultMarine(this, centerX - 100, centerY + 100),
-            new SupportEngineer(this, centerX + 100, centerY + 100)
-        );
-        
-        // Make sure units stay within world bounds
-        this.friendlyUnits.forEach(unit => unit.setCollideWorldBounds(true));
+        // Create units based on player selections
+        this.selectedPlayers.forEach((player, index) => {
+            let unit: BaseUnit;
+            const offset = 100; // Space between units
+            const angle = (index / this.selectedPlayers.length) * Math.PI * 2; // Distribute units in a circle
+            const x = centerX + Math.cos(angle) * offset;
+            const y = centerY + Math.sin(angle) * offset;
+
+            switch (player.class) {
+                case PlayerClass.HEAVY:
+                    unit = new HeavyShieldUnit(this, x, y);
+                    break;
+                case PlayerClass.SPEEDY:
+                    unit = new SpeedyLightUnit(this, x, y);
+                    break;
+                case PlayerClass.ASSAULT:
+                    unit = new AssaultMarine(this, x, y);
+                    break;
+                case PlayerClass.ENGINEER:
+                    unit = new SupportEngineer(this, x, y);
+                    break;
+                default:
+                    console.warn(`Unknown player class: ${player.class}`);
+                    return;
+            }
+
+            // Add unit to friendly units array
+            this.friendlyUnits.push(unit);
+            
+            // Make sure unit stays within world bounds
+            unit.setCollideWorldBounds(true);
+        });
     }
 
     update(time: number) {
@@ -429,9 +464,12 @@ export default class MainScene extends Phaser.Scene {
             this.nextDamageTime = time + this.damageInterval;
         }
 
-        // Check if all friendly units are dead
+        // Check if all friendly units are dead and no respawns are pending
         const allUnitsDead = this.friendlyUnits.every(unit => !unit.active);
-        if (allUnitsDead && this.dogtags.countActive() === 0) {
+        const hasActiveDogtags = this.dogtags.getChildren().length > 0;
+        
+        // Only trigger game over if all units are dead AND there are no dogtags (collected or not)
+        if (allUnitsDead && !hasActiveDogtags) {
             this.gameOver();
         }
     }
@@ -521,21 +559,44 @@ export default class MainScene extends Phaser.Scene {
     private cleanup(): void {
         try {
             // Stop all updates first
-            this.physics.pause();
-            this.time.removeAllEvents();
-            this.tweens.killAll();
+            if (this.physics && this.physics.pause) {
+                this.physics.pause();
+            }
 
-            // Just clear references without destroying
-            this.enemies = [];
-            this.friendlyUnits = [];
+            if (this.time && this.time.removeAllEvents) {
+                this.time.removeAllEvents();
+            }
 
-            // Clear group without destroying members
-            if (this.dogtags) {
-                this.dogtags.clear(false, false);
+            if (this.tweens && this.tweens.killAll) {
+                this.tweens.killAll();
+            }
+
+            // Clear arrays safely
+            if (this.enemies) {
+                this.enemies.forEach(enemy => {
+                    if (enemy && enemy.destroy) {
+                        enemy.destroy();
+                    }
+                });
+                this.enemies = [];
+            }
+
+            if (this.friendlyUnits) {
+                this.friendlyUnits.forEach(unit => {
+                    if (unit && unit.destroy) {
+                        unit.destroy();
+                    }
+                });
+                this.friendlyUnits = [];
+            }
+
+            // Clear dogtags group safely
+            if (this.dogtags && this.dogtags.clear) {
+                this.dogtags.clear(true, true);
             }
 
             // Hide UI elements
-            if (this.ui) {
+            if (this.ui && this.ui.cleanup) {
                 try {
                     this.ui.cleanup();
                 } catch (e) {
@@ -544,24 +605,41 @@ export default class MainScene extends Phaser.Scene {
             }
 
             // Hide wave text
-            if (this.waveText) {
+            if (this.waveText && this.waveText.active) {
                 try {
-                    this.waveText.alpha = 0;
+                    this.waveText.destroy();
                 } catch (e) {
-                    console.warn('Error hiding wave text:', e);
+                    console.warn('Error destroying wave text:', e);
                 }
             }
 
             // Clear graphics
-            if (this.worldBounds) {
+            if (this.worldBounds && this.worldBounds.active) {
                 try {
-                    this.worldBounds.clear();
+                    this.worldBounds.destroy();
                 } catch (e) {
-                    console.warn('Error clearing world bounds:', e);
+                    console.warn('Error destroying world bounds:', e);
                 }
             }
 
-            // Don't call scene.stop() here anymore
+            // Clean up player
+            if (this.player && this.player.destroy) {
+                try {
+                    this.player.destroy();
+                } catch (e) {
+                    console.warn('Error destroying player:', e);
+                }
+            }
+
+            // Clean up minimap
+            if (this.minimap && this.minimap.destroy) {
+                try {
+                    this.minimap.destroy();
+                } catch (e) {
+                    console.warn('Error destroying minimap:', e);
+                }
+            }
+
         } catch (error) {
             console.warn('Error during scene cleanup:', error);
         }
@@ -603,13 +681,23 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-    // Add shutdown hook
+    // Override scene's shutdown method
     shutdown(): void {
         try {
-            // Do minimal cleanup
+            // Do cleanup first
             this.cleanup();
         } catch (error) {
             console.warn('Error during scene shutdown:', error);
+        }
+    }
+
+    // Override scene's destroy method
+    destroy(): void {
+        try {
+            // Do cleanup first
+            this.cleanup();
+        } catch (error) {
+            console.warn('Error during scene destroy:', error);
         }
     }
 

@@ -8,7 +8,7 @@ export abstract class BaseUnit extends Phaser.Physics.Arcade.Sprite {
     protected maxHealth: number;
     public shield: Shield;
     protected healthBar: Phaser.GameObjects.Graphics;
-    protected scene: MainScene;
+    public scene: MainScene;
     protected speed: number = 200;
     protected isDead: boolean = false;
 
