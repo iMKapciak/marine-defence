@@ -1,138 +1,101 @@
 import Phaser from 'phaser';
 import MainScene from '../../scenes/MainScene';
+import { Shield, ShieldConfig } from '../Shield';
 
 export abstract class BaseUnit extends Phaser.Physics.Arcade.Sprite {
-    public scene: MainScene;
+    protected health: number;
     protected maxHealth: number;
-    protected currentHealth: number;
-    protected maxShield: number;
-    protected currentShield: number;
-    protected baseShieldRegenRate: number;
-    protected shieldRegenBoost: number = 0;
-    protected shieldRegenDelay: number = 0; // Delay before shield starts regenerating
-    protected lastDamageTime: number = 0;
-    protected speed: number = 200;
-    
-    // Health bar graphics
+    public shield: Shield;
     protected healthBar: Phaser.GameObjects.Graphics;
-    protected shieldBar: Phaser.GameObjects.Graphics;
-    protected barWidth: number = 40;
-    protected barHeight: number = 4;
-    protected barPadding: number = 2;
+    protected scene: MainScene;
+    protected speed: number = 200;
 
     constructor(
         scene: MainScene,
         x: number,
         y: number,
         texture: string,
-        maxHealth: number,
-        maxShield: number,
-        shieldRegenRate: number,
-        shieldRegenDelay: number = 0
+        health: number,
+        shieldConfig: ShieldConfig
     ) {
         super(scene, x, y, texture);
         this.scene = scene;
-        this.maxHealth = maxHealth;
-        this.currentHealth = maxHealth;
-        this.maxShield = maxShield;
-        this.currentShield = maxShield;
-        this.baseShieldRegenRate = shieldRegenRate;
-        this.shieldRegenDelay = shieldRegenDelay;
-
+        
+        // Set up health
+        this.maxHealth = health;
+        this.health = health;
+        
+        // Set up shield
+        this.shield = new Shield(scene, this, shieldConfig);
+        
+        // Create health bar
+        this.healthBar = scene.add.graphics();
+        
         // Add to scene and enable physics
         scene.add.existing(this);
         scene.physics.add.existing(this);
-
-        // Create health and shield bars
-        this.healthBar = scene.add.graphics();
-        this.shieldBar = scene.add.graphics();
-        this.updateHealthBars();
+        
+        // Update health bar
+        this.updateHealthBar();
     }
 
-    update(time: number) {
-        if (!this.active) return;
-
-        // Shield regeneration
-        if (time > this.lastDamageTime + this.shieldRegenDelay && this.currentShield < this.maxShield) {
-            const totalRegenRate = this.baseShieldRegenRate + this.shieldRegenBoost;
-            this.currentShield = Math.min(
-                this.maxShield,
-                this.currentShield + (totalRegenRate / 60) // Convert per-second rate to per-frame
-            );
-            this.updateHealthBars();
-        }
-
-        this.updateHealthBars();
-    }
-
-    protected updateHealthBars() {
-        // Clear previous graphics
+    protected updateHealthBar(): void {
         this.healthBar.clear();
-        this.shieldBar.clear();
 
-        // Calculate bar positions (above the unit)
-        const barY = -25;
-        
-        // Draw shield bar (top)
-        const shieldWidth = (this.currentShield / this.maxShield) * this.barWidth;
-        this.shieldBar.lineStyle(1, 0x000000);
-        this.shieldBar.fillStyle(0x00ffff);
-        this.shieldBar.fillRect(this.x - this.barWidth / 2, this.y + barY, shieldWidth, this.barHeight);
-        this.shieldBar.strokeRect(this.x - this.barWidth / 2, this.y + barY, this.barWidth, this.barHeight);
+        // Draw background (gray)
+        this.healthBar.fillStyle(0x808080);
+        this.healthBar.fillRect(this.x - 15, this.y - 20, 30, 5);
 
-        // Draw health bar (bottom)
-        const healthWidth = (this.currentHealth / this.maxHealth) * this.barWidth;
-        this.healthBar.lineStyle(1, 0x000000);
-        this.healthBar.fillStyle(0xff0000);
-        this.healthBar.fillRect(this.x - this.barWidth / 2, this.y + barY + this.barHeight + this.barPadding, healthWidth, this.barHeight);
-        this.healthBar.strokeRect(this.x - this.barWidth / 2, this.y + barY + this.barHeight + this.barPadding, this.barWidth, this.barHeight);
+        // Draw health (green)
+        const healthWidth = (this.health / this.maxHealth) * 30;
+        this.healthBar.fillStyle(0x00ff00);
+        this.healthBar.fillRect(this.x - 15, this.y - 20, healthWidth, 5);
     }
 
-    public takeDamage(amount: number) {
-        this.lastDamageTime = this.scene.time.now;
+    public update(time: number): void {
+        if (!this.active) return;
         
-        // Override in child classes for special damage handling
-        this.processShieldDamage(amount);
+        // Update shield
+        this.shield.update(time);
+        
+        // Update health bar position
+        this.updateHealthBar();
     }
 
-    protected processShieldDamage(amount: number) {
-        // Damage goes to shield first
-        if (this.currentShield > 0) {
-            if (this.currentShield >= amount) {
-                this.currentShield -= amount;
-                amount = 0;
-            } else {
-                amount -= this.currentShield;
-                this.currentShield = 0;
-            }
-        }
+    public takeDamage(damage: number): void {
+        // First, let shields absorb damage
+        const remainingDamage = this.shield.takeDamage(damage);
+        
+        if (remainingDamage > 0) {
+            // Apply remaining damage to health
+            this.health = Math.max(0, this.health - remainingDamage);
+            this.updateHealthBar();
+            
+            // Visual feedback for health damage
+            this.setTint(0xff0000);
+            this.scene.time.delayedCall(100, () => {
+                if (this.active) {
+                    this.clearTint();
+                }
+            });
 
-        // Remaining damage goes to health
-        if (amount > 0) {
-            this.currentHealth = Math.max(0, this.currentHealth - amount);
-            if (this.currentHealth <= 0) {
+            if (this.health <= 0) {
                 this.destroy();
             }
         }
-
-        this.updateHealthBars();
     }
 
     public getHealth(): number {
-        return this.currentHealth;
-    }
-
-    public getShield(): number {
-        return this.currentShield;
-    }
-
-    public boostShieldRegen(amount: number) {
-        this.shieldRegenBoost += amount;
+        return this.health;
     }
 
     public destroy(fromScene?: boolean): void {
-        this.healthBar.destroy();
-        this.shieldBar.destroy();
+        if (this.healthBar) {
+            this.healthBar.destroy();
+        }
+        if (this.shield) {
+            this.shield.destroy();
+        }
         super.destroy(fromScene);
     }
 } 

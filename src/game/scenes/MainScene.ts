@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Player } from '../entities/Player';
-import { Enemy } from '../entities/Enemy';
+import { Enemy, EnemyType } from '../entities/Enemy';
 import { UI } from '../ui/UI';
 import { BaseUnit } from '../entities/units/BaseUnit';
 import { HeavyShieldUnit } from '../entities/units/HeavyShieldUnit';
@@ -15,10 +15,23 @@ export default class MainScene extends Phaser.Scene {
     private friendlyUnits: BaseUnit[] = [];
     private ui!: UI;
     private wave: number = 1;
-    private experience: number = 0;
+    private characterLevel: number = 1;
+    private characterExperience: number = 0;
+    private experienceToNextLevel: number = 100;
     private nextDamageTime: number = 0;
     private damageInterval: number = 1000; // 1 second between damage tests
     private spaceKey!: Phaser.Input.Keyboard.Key;
+    private waveText: Phaser.GameObjects.Text;
+    
+    // World bounds
+    private readonly WORLD_WIDTH = 2400;
+    private readonly WORLD_HEIGHT = 1800;
+    private worldBounds!: Phaser.GameObjects.Graphics;
+
+    // Add method to get friendly units
+    public getFriendlyUnits(): BaseUnit[] {
+        return this.friendlyUnits;
+    }
 
     constructor() {
         super({ key: 'MainScene' });
@@ -135,13 +148,24 @@ export default class MainScene extends Phaser.Scene {
     }
 
     create() {
-        // Initialize player
-        this.player = new Player(this, 400, 300);
+        // Set up the world bounds
+        this.physics.world.setBounds(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
+        
+        // Create a visual boundary
+        this.createWorldBoundary();
+        
+        // Initialize player in the center of the world
+        this.player = new Player(this, this.WORLD_WIDTH / 2, this.WORLD_HEIGHT / 2);
+        
+        // Set up camera
+        this.cameras.main.setBounds(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
+        this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+        this.cameras.main.setZoom(1.0); // Adjust this value to change zoom level
         
         // Initialize UI
         this.ui = new UI(this);
         
-        // Create test units
+        // Create test units near the player
         this.createTestUnits();
 
         // Start spawning enemies
@@ -160,49 +184,179 @@ export default class MainScene extends Phaser.Scene {
         this.physics.add.overlap(
             this.player.bullets,
             this.enemies,
-            (obj1, obj2) => {
-                try {
-                    // Make sure we identify bullet and enemy correctly
-                    let bullet: Bullet;
-                    let enemy: Enemy;
-                    
-                    // Determine which object is the bullet and which is the enemy
-                    if (obj1 instanceof Bullet) {
-                        bullet = obj1;
-                        enemy = obj2 as Enemy;
-                    } else {
-                        bullet = obj2 as Bullet;
-                        enemy = obj1 as Enemy;
-                    }
-                    
-                    if (!enemy || !bullet || !enemy.active || !bullet.active) return;
-                    
-                    // Get damage from bullet
-                    const damage = bullet.damage || 20; // Fallback to 20 if damage property is undefined
-                    console.log(`Bullet hit enemy with damage: ${damage}`);
-                    
-                    // Apply damage to enemy
-                    enemy.takeDamage(damage);
-                    
-                    // Destroy the bullet
-                    bullet.destroy();
-                } catch (error) {
-                    console.error('Error in bullet-enemy collision:', error);
-                }
+            this.handleBulletEnemyCollision,
+            undefined,
+            this
+        );
+
+        // Set up collisions with world bounds
+        this.player.setCollideWorldBounds(true);
+        this.enemies.forEach(enemy => enemy.setCollideWorldBounds(true));
+        this.friendlyUnits.forEach(unit => unit.setCollideWorldBounds(true));
+
+        // Set up collision between enemies and player/friendly units
+        this.physics.add.overlap(
+            this.enemies,
+            this.player,
+            (enemyObj: any, playerObj: any) => {
+                this.handleEnemyCollision(enemyObj as Enemy, playerObj as Player);
             },
             undefined,
             this
         );
+
+        // Add collision between enemies and friendly units
+        this.physics.add.overlap(
+            this.enemies,
+            this.friendlyUnits,
+            (enemyObj: any, unitObj: any) => {
+                this.handleEnemyCollision(enemyObj as Enemy, unitObj as BaseUnit);
+            },
+            undefined,
+            this
+        );
+
+        // Add wave text
+        this.waveText = this.add.text(16, 16, `Wave: ${this.wave}`, {
+            fontSize: '32px',
+            color: '#fff'
+        });
+    }
+
+    private createWorldBoundary() {
+        // Create a graphics object for the world boundary
+        this.worldBounds = this.add.graphics();
+        
+        // Style for the boundary
+        this.worldBounds.lineStyle(4, 0x00ff00, 0.8); // Green border
+        
+        // Draw the rectangle
+        this.worldBounds.strokeRect(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
+        
+        // Add some grid lines for reference
+        this.worldBounds.lineStyle(1, 0x00ff00, 0.3);
+        
+        // Vertical lines
+        for (let x = 0; x < this.WORLD_WIDTH; x += 200) {
+            this.worldBounds.lineBetween(x, 0, x, this.WORLD_HEIGHT);
+        }
+        
+        // Horizontal lines
+        for (let y = 0; y < this.WORLD_HEIGHT; y += 200) {
+            this.worldBounds.lineBetween(0, y, this.WORLD_WIDTH, y);
+        }
+    }
+
+    private handleBulletEnemyCollision(obj1: Phaser.GameObjects.GameObject, obj2: Phaser.GameObjects.GameObject): void {
+        console.log('Collision detected between:', obj1, obj2);
+        
+        // Determine which object is the bullet and which is the enemy
+        let bullet: Bullet | null = null;
+        let enemy: Enemy | null = null;
+
+        if (obj1 instanceof Bullet && obj2 instanceof Enemy) {
+            bullet = obj1;
+            enemy = obj2;
+        } else if (obj1 instanceof Enemy && obj2 instanceof Bullet) {
+            bullet = obj2;
+            enemy = obj1;
+        }
+
+        // If we couldn't identify the objects, or either is inactive, return
+        if (!bullet?.active || !enemy?.active) {
+            console.log('Bullet or enemy is inactive or not properly identified');
+            return;
+        }
+
+        console.log('Applying damage to enemy');
+        
+        try {
+            // Apply damage and deactivate bullet
+            const damage = bullet.getDamage();
+            enemy.takeDamage(damage);
+            bullet.setActive(false);
+            bullet.setVisible(false);
+        } catch (error) {
+            console.error('Error in bullet-enemy collision:', error);
+        }
+    }
+
+    private handleEnemyCollision(enemy: Enemy, target: Player | BaseUnit) {
+        if (!enemy.active || !target.active) return;
+        
+        // Check if enough time has passed since last damage
+        const now = this.time.now;
+        if (!enemy.lastDamageTime || now > enemy.lastDamageTime + enemy.damageInterval) {
+            // Apply damage to target
+            const damage = enemy.getDamageAmount();
+            target.takeDamage(damage);
+            
+            // Update UI if player was damaged
+            if (target instanceof Player) {
+                this.ui.updateHealth(target.getHealth());
+            }
+            
+            // Update last damage time
+            enemy.lastDamageTime = now;
+            
+            // Visual feedback
+            target.setTint(0xff0000);
+            this.time.delayedCall(100, () => {
+                if (target.active) {
+                    target.clearTint();
+                }
+            });
+        }
+    }
+
+    private spawnWave(): void {
+        const numEnemies = Math.min(5 + this.wave * 2, 20);
+        
+        for (let i = 0; i < numEnemies; i++) {
+            const spawnPoint = this.getRandomSpawnPoint();
+            
+            // Determine enemy type based on wave and random chance
+            let enemyType: EnemyType;
+            const rand = Math.random();
+            
+            if (this.wave < 3) {
+                // Early waves: mostly normal enemies, some fast ones
+                enemyType = rand < 0.7 ? EnemyType.NORMAL : EnemyType.FAST;
+            } else if (this.wave < 5) {
+                // Mid waves: mix of all types
+                if (rand < 0.4) enemyType = EnemyType.NORMAL;
+                else if (rand < 0.7) enemyType = EnemyType.FAST;
+                else enemyType = EnemyType.HEAVY;
+            } else {
+                // Later waves: more heavy enemies
+                if (rand < 0.3) enemyType = EnemyType.NORMAL;
+                else if (rand < 0.6) enemyType = EnemyType.FAST;
+                else enemyType = EnemyType.HEAVY;
+            }
+
+            const enemy = new Enemy(this, spawnPoint.x, spawnPoint.y, this.wave, enemyType);
+            enemy.init();
+            this.enemies.push(enemy);
+        }
+
+        this.wave++;
+        this.ui.updateGameLevel(this.wave);
     }
 
     private createTestUnits() {
-        // Create one of each unit type for testing
+        // Create units around the player's starting position
+        const centerX = this.WORLD_WIDTH / 2;
+        const centerY = this.WORLD_HEIGHT / 2;
+        
         this.friendlyUnits.push(
-            new HeavyShieldUnit(this, 300, 200),
-            new SpeedyLightUnit(this, 500, 200),
-            new AssaultMarine(this, 300, 400),
-            new SupportEngineer(this, 500, 400)
+            new HeavyShieldUnit(this, centerX - 100, centerY - 100),
+            new SpeedyLightUnit(this, centerX + 100, centerY - 100),
+            new AssaultMarine(this, centerX - 100, centerY + 100),
+            new SupportEngineer(this, centerX + 100, centerY + 100)
         );
+        
+        // Make sure units stay within world bounds
+        this.friendlyUnits.forEach(unit => unit.setCollideWorldBounds(true));
     }
 
     update(time: number) {
@@ -214,7 +368,6 @@ export default class MainScene extends Phaser.Scene {
         
         // Check if wave is completed
         if (this.enemies.length === 0) {
-            this.wave++;
             this.spawnWave();
         }
 
@@ -229,26 +382,36 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-    private spawnWave() {
-        const enemyCount = this.wave * 2;
-        for (let i = 0; i < enemyCount; i++) {
-            const x = Phaser.Math.Between(0, 800);
-            const y = Phaser.Math.Between(0, 600);
-            const enemy = new Enemy(this, x, y, this.wave);
-            // Ensure enemy is properly added to the scene and physics system
-            this.add.existing(enemy);
-            this.physics.add.existing(enemy);
-            enemy.setCircle(10);
-            this.enemies.push(enemy);
+    public addExperience(amount: number): void {
+        this.characterExperience += amount;
+        
+        // Check for level up
+        while (this.characterExperience >= this.experienceToNextLevel) {
+            this.characterExperience -= this.experienceToNextLevel;
+            this.characterLevel++;
+            this.experienceToNextLevel = Math.floor(this.experienceToNextLevel * 1.5);
+            
+            // Update UI
+            this.ui.updateCharacterLevel(this.characterLevel);
+            
+            // Could add level up effects here
+            const levelUpText = this.add.text(this.player.x, this.player.y - 50, 'Level Up!', {
+                fontSize: '32px',
+                color: '#ffff00'
+            });
+            
+            this.tweens.add({
+                targets: levelUpText,
+                y: levelUpText.y - 100,
+                alpha: 0,
+                duration: 2000,
+                ease: 'Power2',
+                onComplete: () => levelUpText.destroy()
+            });
         }
     }
 
-    public addExperience(amount: number) {
-        this.experience += amount;
-        this.ui.updateExperience(this.experience);
-    }
-
-    public removeEnemy(enemy: Enemy) {
+    public removeEnemy(enemy: Enemy): void {
         const index = this.enemies.indexOf(enemy);
         if (index > -1) {
             this.enemies.splice(index, 1);
@@ -256,7 +419,34 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-    public getFriendlyUnits(): BaseUnit[] {
-        return this.friendlyUnits;
+    private getRandomSpawnPoint(): { x: number, y: number } {
+        // Randomly choose which edge to spawn on (0: top, 1: right, 2: bottom, 3: left)
+        const edge = Phaser.Math.Between(0, 3);
+        let x: number;
+        let y: number;
+
+        switch (edge) {
+            case 0: // Top
+                x = Phaser.Math.Between(0, this.WORLD_WIDTH);
+                y = -20;
+                break;
+            case 1: // Right
+                x = this.WORLD_WIDTH + 20;
+                y = Phaser.Math.Between(0, this.WORLD_HEIGHT);
+                break;
+            case 2: // Bottom
+                x = Phaser.Math.Between(0, this.WORLD_WIDTH);
+                y = this.WORLD_HEIGHT + 20;
+                break;
+            case 3: // Left
+                x = -20;
+                y = Phaser.Math.Between(0, this.WORLD_HEIGHT);
+                break;
+            default:
+                x = -20;
+                y = -20;
+        }
+
+        return { x, y };
     }
 } 

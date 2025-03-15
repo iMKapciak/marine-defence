@@ -1,11 +1,14 @@
 import Phaser from 'phaser';
+import MainScene from '../scenes/MainScene';
 
 export class Bullet extends Phaser.Physics.Arcade.Sprite {
     public damage: number;
     private speed: number;
+    private scene: MainScene;
 
-    constructor(scene: Phaser.Scene, x: number, y: number) {
+    constructor(scene: MainScene, x: number, y: number) {
         super(scene, x, y, 'bullet');
+        this.scene = scene;
         
         // Set default values
         this.damage = 20;
@@ -41,12 +44,12 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     update() {
         if (!this.active) return;
 
-        // Deactivate bullets when they go off screen
-        const width = Number(this.scene.game.config.width);
-        const height = Number(this.scene.game.config.height);
+        // Get world bounds from physics
+        const bounds = this.scene.physics.world.bounds;
         
-        if (this.x < 0 || this.x > width ||
-            this.y < 0 || this.y > height) {
+        // Deactivate bullets when they go outside world bounds
+        if (this.x < bounds.x || this.x > bounds.right ||
+            this.y < bounds.y || this.y > bounds.bottom) {
             this.setActive(false);
             this.setVisible(false);
             this.destroy();

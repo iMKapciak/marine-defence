@@ -2,38 +2,123 @@ import Phaser from 'phaser';
 import MainScene from '../scenes/MainScene';
 import { BaseUnit } from './units/BaseUnit';
 
+export enum EnemyType {
+    FAST = 'fast',
+    NORMAL = 'normal',
+    HEAVY = 'heavy'
+}
+
+interface EnemyStats {
+    health: number;
+    speed: number;
+    damage: number;
+    experienceValue: number;
+    color: number;
+    size: number;
+}
+
+const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
+    [EnemyType.FAST]: {
+        health: 30,
+        speed: 200,
+        damage: 5,
+        experienceValue: 5,
+        color: 0xff6666,
+        size: 8
+    },
+    [EnemyType.NORMAL]: {
+        health: 50,
+        speed: 100,
+        damage: 10,
+        experienceValue: 10,
+        color: 0xff0000,
+        size: 10
+    },
+    [EnemyType.HEAVY]: {
+        health: 100,
+        speed: 50,
+        damage: 20,
+        experienceValue: 20,
+        color: 0x990000,
+        size: 15
+    }
+};
+
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
-    public scene: MainScene;
     private health: number;
     private maxHealth: number;
     private speed: number;
     private experienceValue: number;
     private healthBar: Phaser.GameObjects.Graphics;
+    private damage: number;
+    private enemyType: EnemyType;
+    public lastDamageTime: number = 0;
+    public damageInterval: number = 1000; // 1 second between attacks
+    public scene: MainScene;
 
-    constructor(scene: MainScene, x: number, y: number, level: number) {
+    constructor(scene: MainScene, x: number, y: number, level: number, type: EnemyType = EnemyType.NORMAL) {
         super(scene, x, y, 'enemy');
+        
         this.scene = scene;
+        this.enemyType = type;
         
-        // Add to scene and enable physics
-        scene.add.existing(this);
-        scene.physics.add.existing(this);
+        // Get base stats for this enemy type
+        const stats = ENEMY_STATS[type];
         
-        // Set enemy properties based on level
-        this.maxHealth = 50 * level;
+        // Scale stats based on level
+        this.maxHealth = stats.health * (1 + (level - 1) * 0.5);
         this.health = this.maxHealth;
-        this.speed = 100 + (level * 10);
-        this.experienceValue = 10 * level;
-        
-        // Set the size for physics body
-        this.setCircle(10);
+        this.speed = stats.speed * (1 + (level - 1) * 0.1);
+        this.experienceValue = stats.damage * level;
+        this.damage = stats.damage * (1 + (level - 1) * 0.3);
 
+        // Create custom texture for this enemy type
+        this.createEnemyTexture(stats.color, stats.size);
+        
         // Create health bar
         this.healthBar = scene.add.graphics();
         this.updateHealthBar();
     }
 
+    private createEnemyTexture(color: number, size: number): void {
+        const graphics = this.scene.add.graphics();
+        graphics.lineStyle(2, color);
+        graphics.fillStyle(color);
+        graphics.beginPath();
+        graphics.arc(0, 0, size, 0, Math.PI * 2);
+        graphics.closePath();
+        graphics.fill();
+        graphics.stroke();
+        
+        const textureName = `enemy_${this.enemyType}_${color}`;
+        graphics.generateTexture(textureName, size * 2 + 4, size * 2 + 4);
+        graphics.destroy();
+        
+        this.setTexture(textureName);
+    }
+
+    public init(): void {
+        // Add to scene and enable physics
+        this.scene.add.existing(this);
+        this.scene.physics.add.existing(this);
+        
+        // Set the size for physics body
+        this.setCircle(10);
+        
+        // Make sure the sprite is active
+        this.setActive(true);
+        this.setVisible(true);
+    }
+
+    public getDamageAmount(): number {
+        return this.damage;
+    }
+
     public takeDamage(damage: number): void {
-        if (!this.active) return;
+        if (!this.active) {
+            console.log('Enemy is inactive, cannot take damage');
+            return;
+        }
         
         console.log(`Enemy taking ${damage} damage. Current health: ${this.health}`);
         this.health = Math.max(0, this.health - damage);
