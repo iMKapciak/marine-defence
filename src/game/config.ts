@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import MainScene from './scenes/MainScene';
+import { LobbyScene } from './scenes/LobbyScene';
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
@@ -12,6 +13,6 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
             debug: true // Enable debug mode temporarily to see physics bodies
         }
     },
-    scene: MainScene,
+    scene: [LobbyScene, MainScene],
     backgroundColor: '#000033'
 }; 

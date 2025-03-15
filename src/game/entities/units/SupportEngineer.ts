@@ -9,6 +9,7 @@ export class SupportEngineer extends BaseUnit {
     private lastBoostTime: number = 0;
     private boostInterval: number = 1000; // Check for units to boost every second
     private boostVisual: Phaser.GameObjects.Graphics;
+    private mainScene: MainScene;
 
     constructor(scene: MainScene, x: number, y: number) {
         const shieldConfig: ShieldConfig = {
@@ -19,9 +20,12 @@ export class SupportEngineer extends BaseUnit {
         };
 
         super(scene, x, y, 'engineerUnit', 120, shieldConfig);
+        this.mainScene = scene;
 
         // Create visual indicator for boost range
-        this.boostVisual = scene.add.graphics();
+        this.boostVisual = scene.add.graphics()
+            .setScrollFactor(0)
+            .setDepth(50);
         this.updateBoostVisual();
     }
 
@@ -32,7 +36,7 @@ export class SupportEngineer extends BaseUnit {
     }
 
     private boostNearbyUnits(): void {
-        const friendlyUnits = this.scene.getFriendlyUnits();
+        const friendlyUnits = this.mainScene.getFriendlyUnits();
         if (!friendlyUnits || !Array.isArray(friendlyUnits)) {
             return;
         }
@@ -55,11 +59,11 @@ export class SupportEngineer extends BaseUnit {
             }
             
             // Visual feedback
-            const line = this.scene.add.graphics();
+            const line = this.mainScene.add.graphics();
             line.lineStyle(2, 0x00ffff, 0.5);
             line.lineBetween(this.x, this.y, unit.x, unit.y);
             
-            this.scene.time.delayedCall(200, () => {
+            this.mainScene.time.delayedCall(200, () => {
                 line.destroy();
             });
         });

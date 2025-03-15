@@ -33,7 +33,7 @@ export class UI {
     }
 
     public updateHealth(health: number): void {
-        this.healthText.setText(`Health: ${health}`);
+        this.healthText.setText(`Health: ${Math.round(health)}`);
     }
 
     public updateCharacterLevel(level: number): void {
@@ -42,5 +42,35 @@ export class UI {
 
     public updateGameLevel(level: number): void {
         this.gameLevelText.setText(`Wave: ${level}`);
+    }
+
+    public destroy(): void {
+        // Clean up all UI elements
+        if (this.healthText) {
+            this.healthText.destroy();
+        }
+        if (this.characterLevelText) {
+            this.characterLevelText.destroy();
+        }
+        if (this.gameLevelText) {
+            this.gameLevelText.destroy();
+        }
+    }
+
+    public cleanup(): void {
+        try {
+            // Hide all UI elements by setting their alpha to 0
+            if (this.healthText) {
+                this.healthText.alpha = 0;
+            }
+            if (this.characterLevelText) {
+                this.characterLevelText.alpha = 0;
+            }
+            if (this.gameLevelText) {
+                this.gameLevelText.alpha = 0;
+            }
+        } catch (error) {
+            console.warn('Error during UI cleanup:', error);
+        }
     }
 } 

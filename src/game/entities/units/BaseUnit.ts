@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import MainScene from '../../scenes/MainScene';
 import { Shield, ShieldConfig } from '../Shield';
+import { Dogtag } from '../Dogtag';
 
 export abstract class BaseUnit extends Phaser.Physics.Arcade.Sprite {
     protected health: number;
@@ -9,6 +10,7 @@ export abstract class BaseUnit extends Phaser.Physics.Arcade.Sprite {
     protected healthBar: Phaser.GameObjects.Graphics;
     protected scene: MainScene;
     protected speed: number = 200;
+    protected isDead: boolean = false;
 
     constructor(
         scene: MainScene,
@@ -63,6 +65,8 @@ export abstract class BaseUnit extends Phaser.Physics.Arcade.Sprite {
     }
 
     public takeDamage(damage: number): void {
+        if (this.isDead) return;
+
         // First, let shields absorb damage
         const remainingDamage = this.shield.takeDamage(damage);
         
@@ -80,9 +84,30 @@ export abstract class BaseUnit extends Phaser.Physics.Arcade.Sprite {
             });
 
             if (this.health <= 0) {
-                this.destroy();
+                this.die();
             }
         }
+    }
+
+    protected die(): void {
+        if (this.isDead) return;
+        this.isDead = true;
+
+        // Spawn a dogtag at unit's position and add it to the dogtags group
+        const dogtag = new Dogtag(this.scene, this.x, this.y, this);
+        this.scene.addDogtag(dogtag);
+
+        // Visual death effect
+        this.scene.tweens.add({
+            targets: this,
+            alpha: 0,
+            scale: 0.8,
+            duration: 500,
+            onComplete: () => {
+                this.setActive(false);
+                this.setVisible(false);
+            }
+        });
     }
 
     public getHealth(): number {
@@ -97,5 +122,24 @@ export abstract class BaseUnit extends Phaser.Physics.Arcade.Sprite {
             this.shield.destroy();
         }
         super.destroy(fromScene);
+    }
+
+    public respawn(x: number, y: number): void {
+        // Reset health and shield
+        this.health = this.maxHealth;
+        this.shield.reset();
+        
+        // Reset position and visibility
+        this.setPosition(x, y);
+        this.setActive(true);
+        this.setVisible(true);
+        this.setAlpha(1);
+        this.setScale(1);
+        
+        // Reset death state
+        this.isDead = false;
+        
+        // Update health bar
+        this.updateHealthBar();
     }
 } 

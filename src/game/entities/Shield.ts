@@ -111,4 +111,10 @@ export class Shield {
     public boost(amount: number): void {
         this.currentBoost = amount;
     }
+
+    public reset(): void {
+        this.currentShields = this.maxShields;
+        this.lastDamageTime = 0;
+        this.updateShieldBar();
+    }
 } 

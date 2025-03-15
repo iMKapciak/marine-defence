@@ -8,12 +8,15 @@ import { SpeedyLightUnit } from '../entities/units/SpeedyLightUnit';
 import { AssaultMarine } from '../entities/units/AssaultMarine';
 import { SupportEngineer } from '../entities/units/SupportEngineer';
 import { Bullet } from '../entities/Bullet';
+import { Minimap } from '../ui/Minimap';
+import { Dogtag } from '../entities/Dogtag';
 
 export default class MainScene extends Phaser.Scene {
     public player!: Player;
     private enemies: Enemy[] = [];
     private friendlyUnits: BaseUnit[] = [];
     private ui!: UI;
+    private minimap!: Minimap;
     private wave: number = 1;
     private characterLevel: number = 1;
     private characterExperience: number = 0;
@@ -27,6 +30,26 @@ export default class MainScene extends Phaser.Scene {
     private readonly WORLD_WIDTH = 2400;
     private readonly WORLD_HEIGHT = 1800;
     private worldBounds!: Phaser.GameObjects.Graphics;
+
+    private dogtags: Phaser.Physics.Arcade.Group;
+    private respawningUnits: Map<BaseUnit, number> = new Map();
+
+    // Add getters for minimap
+    public getWorldWidth(): number {
+        return this.WORLD_WIDTH;
+    }
+
+    public getWorldHeight(): number {
+        return this.WORLD_HEIGHT;
+    }
+
+    public getPlayer(): Player {
+        return this.player;
+    }
+
+    public getEnemies(): Enemy[] {
+        return this.enemies;
+    }
 
     // Add method to get friendly units
     public getFriendlyUnits(): BaseUnit[] {
@@ -165,7 +188,10 @@ export default class MainScene extends Phaser.Scene {
         // Initialize UI
         this.ui = new UI(this);
         
-        // Create test units near the player
+        // Initialize minimap after UI
+        this.minimap = new Minimap(this);
+        
+        // Create test units near the player's starting position
         this.createTestUnits();
 
         // Start spawning enemies
@@ -221,6 +247,22 @@ export default class MainScene extends Phaser.Scene {
             fontSize: '32px',
             color: '#fff'
         });
+
+        // Create dogtags group
+        this.dogtags = this.physics.add.group();
+
+        // Add collision between player and dogtags
+        this.physics.add.overlap(
+            this.player,
+            this.dogtags,
+            (player, dogtag) => {
+                if (dogtag instanceof Dogtag) {
+                    dogtag.collect();
+                }
+            },
+            undefined,
+            this
+        );
     }
 
     private createWorldBoundary() {
@@ -360,11 +402,17 @@ export default class MainScene extends Phaser.Scene {
     }
 
     update(time: number) {
-        if (!this.player.active) return;
+        if (!this.player.active) {
+            this.gameOver();
+            return;
+        }
 
         this.player.update();
         this.enemies.forEach(enemy => enemy.update());
         this.friendlyUnits.forEach(unit => unit.update(time));
+        
+        // Update minimap
+        this.minimap.update();
         
         // Check if wave is completed
         if (this.enemies.length === 0) {
@@ -379,6 +427,12 @@ export default class MainScene extends Phaser.Scene {
                 this.ui.updateHealth(this.player.getHealth());
             }
             this.nextDamageTime = time + this.damageInterval;
+        }
+
+        // Check if all friendly units are dead
+        const allUnitsDead = this.friendlyUnits.every(unit => !unit.active);
+        if (allUnitsDead && this.dogtags.countActive() === 0) {
+            this.gameOver();
         }
     }
 
@@ -448,5 +502,118 @@ export default class MainScene extends Phaser.Scene {
         }
 
         return { x, y };
+    }
+
+    public respawnUnit(unit: BaseUnit, x: number, y: number): void {
+        console.log('MainScene: Respawning unit', { x, y });
+        
+        // Ensure the unit is in our friendlyUnits array
+        if (!this.friendlyUnits.includes(unit)) {
+            console.error('Unit not found in friendlyUnits array');
+            return;
+        }
+
+        // Call the unit's respawn method
+        unit.respawn(x, y);
+        console.log('Unit respawned successfully');
+    }
+
+    private cleanup(): void {
+        try {
+            // Stop all updates first
+            this.physics.pause();
+            this.time.removeAllEvents();
+            this.tweens.killAll();
+
+            // Just clear references without destroying
+            this.enemies = [];
+            this.friendlyUnits = [];
+
+            // Clear group without destroying members
+            if (this.dogtags) {
+                this.dogtags.clear(false, false);
+            }
+
+            // Hide UI elements
+            if (this.ui) {
+                try {
+                    this.ui.cleanup();
+                } catch (e) {
+                    console.warn('Error cleaning up UI:', e);
+                }
+            }
+
+            // Hide wave text
+            if (this.waveText) {
+                try {
+                    this.waveText.alpha = 0;
+                } catch (e) {
+                    console.warn('Error hiding wave text:', e);
+                }
+            }
+
+            // Clear graphics
+            if (this.worldBounds) {
+                try {
+                    this.worldBounds.clear();
+                } catch (e) {
+                    console.warn('Error clearing world bounds:', e);
+                }
+            }
+
+            // Don't call scene.stop() here anymore
+        } catch (error) {
+            console.warn('Error during scene cleanup:', error);
+        }
+    }
+
+    private gameOver(): void {
+        try {
+            // Stop all updates and physics
+            this.physics.pause();
+
+            // Show game over text
+            const gameOverText = this.add.text(
+                this.cameras.main.centerX,
+                this.cameras.main.centerY,
+                'GAME OVER\nClick to restart',
+                {
+                    fontSize: '48px',
+                    color: '#ff0000',
+                    align: 'center'
+                }
+            ).setOrigin(0.5);
+
+            // Make text fixed to camera
+            gameOverText.setScrollFactor(0);
+
+            // Add click handler to restart
+            this.input.once('pointerdown', () => {
+                try {
+                    // Just restart the scene, let Phaser handle cleanup
+                    this.scene.restart();
+                } catch (error) {
+                    console.warn('Error during game restart:', error);
+                    // Force a hard restart if cleanup fails
+                    window.location.reload();
+                }
+            });
+        } catch (error) {
+            console.warn('Error during game over:', error);
+        }
+    }
+
+    // Add shutdown hook
+    shutdown(): void {
+        try {
+            // Do minimal cleanup
+            this.cleanup();
+        } catch (error) {
+            console.warn('Error during scene shutdown:', error);
+        }
+    }
+
+    public addDogtag(dogtag: Dogtag): void {
+        this.dogtags.add(dogtag);
     }
 } 
