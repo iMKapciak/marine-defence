@@ -29,28 +29,28 @@ export class ClassPanel extends Phaser.GameObjects.Container {
             description: 'Heavy armored unit with powerful weapons\nbut slower movement',
             color: 0x8B0000,
             weapons: ['Minigun', 'Rocket Launcher'],
-            avatar: 'heavy'
+            avatar: 'heavy_avatar'
         },
         {
             name: PlayerClass.SPEEDY,
             description: 'Fast and agile unit with light weapons\nand high mobility',
             color: 0x4169E1,
             weapons: ['SMG', 'Pistol'],
-            avatar: 'light'
+            avatar: 'light_avatar'
         },
         {
             name: PlayerClass.ASSAULT,
             description: 'Balanced unit with medium armor\nand versatile weapons',
             color: 0x006400,
             weapons: ['Assault Rifle', 'Grenades'],
-            avatar: 'assault'
+            avatar: 'assault_avatar'
         },
         {
             name: PlayerClass.ENGINEER,
             description: 'Support unit that can repair allies\nand deploy turrets',
             color: 0xDAA520,
             weapons: ['Repair Tool', 'Shotgun'],
-            avatar: 'engineer'
+            avatar: 'engineer_avatar'
         }
     ];
 

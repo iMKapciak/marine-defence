@@ -1,76 +1,162 @@
 import Phaser from 'phaser';
 import MainScene from '../scenes/MainScene';
+import { Scene } from 'phaser';
+import { PlayerClass } from '../types/PlayerData';
 
 export class UI {
-    private scene: MainScene;
-    private healthText: Phaser.GameObjects.Text;
-    private characterLevelText: Phaser.GameObjects.Text;
-    private gameLevelText: Phaser.GameObjects.Text;
+    private readonly BAR_WIDTH = 60;
+    private readonly BAR_HEIGHT = 6;
+    private readonly BAR_SPACING = 4;
+    private readonly AVATAR_SIZE = 64;
+    private scene: Scene;
+    private player: any;
+    private shieldBarBackground: Phaser.GameObjects.Graphics | null = null;
+    private shieldBarFill: Phaser.GameObjects.Graphics | null = null;
+    private healthBarBackground: Phaser.GameObjects.Graphics | null = null;
+    private healthBarFill: Phaser.GameObjects.Graphics | null = null;
+    private classAvatar: Phaser.GameObjects.Sprite | null = null;
+    private characterLevelText!: Phaser.GameObjects.Text;
+    private gameLevelText!: Phaser.GameObjects.Text;
+    private lastHealth: number = 0;
+    private lastShieldValue: number = 0;
 
-    constructor(scene: MainScene) {
+    constructor(scene: Scene, player: any) {
         this.scene = scene;
-        
-        // Health text (top left)
-        this.healthText = scene.add.text(16, 16, 'Health: 100', {
-            fontSize: '24px',
-            color: '#ffffff'
-        });
-        this.healthText.setScrollFactor(0);
+        this.player = player;
+        this.createUI();
+    }
 
-        // Character level (next to health)
-        this.characterLevelText = scene.add.text(200, 16, 'Level: 1', {
-            fontSize: '24px',
-            color: '#ffff00'
-        });
+    private createUI() {
+        // Create health bar graphics objects
+        this.healthBarBackground = this.scene.add.graphics();
+        this.healthBarFill = this.scene.add.graphics();
+        
+        // Create shield bar graphics objects
+        this.shieldBarBackground = this.scene.add.graphics();
+        this.shieldBarFill = this.scene.add.graphics();
+        
+        // Create class avatar
+        const avatarSize = 64;
+        const padding = 10;
+        const avatarKey = `${this.player.playerClass.toLowerCase()}_avatar`;
+        this.classAvatar = this.scene.add.sprite(
+            padding + avatarSize/2,
+            this.scene.cameras.main.height - padding - avatarSize/2,
+            avatarKey
+        );
+        this.classAvatar.setDisplaySize(avatarSize, avatarSize);
+        this.classAvatar.setScrollFactor(0);
+
+        // Create character level text
+        this.characterLevelText = this.scene.add.text(
+            padding * 2 + avatarSize,
+            this.scene.cameras.main.height - padding - avatarSize/2,
+            'Level: 1',
+            { fontSize: '24px', color: '#ffffff' }
+        );
         this.characterLevelText.setScrollFactor(0);
 
-        // Game level (top right)
-        this.gameLevelText = scene.add.text(scene.scale.width - 150, 16, 'Wave: 1', {
-            fontSize: '24px',
-            color: '#00ff00'
-        });
+        // Create game level text
+        this.gameLevelText = this.scene.add.text(
+            this.scene.cameras.main.width - padding,
+            padding,
+            'Wave: 1',
+            { fontSize: '24px', color: '#ffffff' }
+        );
+        this.gameLevelText.setOrigin(1, 0);
         this.gameLevelText.setScrollFactor(0);
+        
+        // Initial updates
+        this.updateHealth(this.player.getHealth());
+        this.updateShield();
     }
 
-    public updateHealth(health: number): void {
-        this.healthText.setText(`Health: ${Math.round(health)}`);
+    public update() {
+        // Only update if player exists and values have changed
+        if (!this.player) return;
+
+        const currentHealth = this.player.getHealth();
+        if (currentHealth !== this.lastHealth) {
+            this.updateHealth(currentHealth);
+            this.lastHealth = currentHealth;
+        }
+
+        if (this.player.shield) {
+            const currentShield = this.player.shield.getCurrentShields();
+            if (currentShield !== this.lastShieldValue) {
+                this.updateShield();
+                this.lastShieldValue = currentShield;
+            }
+        }
+
+        // Always update positions even if values haven't changed
+        this.updateHealthBarPosition();
+        this.updateShieldBarPosition();
     }
 
-    public updateCharacterLevel(level: number): void {
+    private updateHealthBarPosition() {
+        const barX = this.player.x - this.BAR_WIDTH / 2;
+        const barY = this.player.y - 30;
+        
+        // Update background position
+        this.healthBarBackground?.clear();
+        this.healthBarBackground?.fillStyle(0x333333);
+        this.healthBarBackground?.fillRect(barX, barY, this.BAR_WIDTH, this.BAR_HEIGHT);
+        
+        // Update fill position
+        const healthPercentage = Math.max(0, Math.min(1, this.player.getHealth() / this.player.getMaxHealth()));
+        this.healthBarFill?.clear();
+        this.healthBarFill?.fillStyle(0xff0000);
+        this.healthBarFill?.fillRect(barX, barY, this.BAR_WIDTH * healthPercentage, this.BAR_HEIGHT);
+    }
+
+    private updateShieldBarPosition() {
+        if (!this.player.shield) return;
+
+        const barX = this.player.x - this.BAR_WIDTH / 2;
+        const barY = this.player.y - 30 - this.BAR_HEIGHT - this.BAR_SPACING;
+        
+        // Update background position
+        this.shieldBarBackground?.clear();
+        this.shieldBarBackground?.fillStyle(0x333333);
+        this.shieldBarBackground?.fillRect(barX, barY, this.BAR_WIDTH, this.BAR_HEIGHT);
+        
+        // Update fill position
+        const shieldPercentage = this.player.shield.getCurrentShields() / this.player.shield.getMaxShields();
+        this.shieldBarFill?.clear();
+        this.shieldBarFill?.fillStyle(0x00ffff);
+        this.shieldBarFill?.fillRect(barX, barY, this.BAR_WIDTH * shieldPercentage, this.BAR_HEIGHT);
+    }
+
+    public updateHealth(health: number) {
+        this.lastHealth = health;
+        this.updateHealthBarPosition();
+    }
+
+    public updateShield() {
+        if (!this.player.shield) {
+            console.warn('Player shield not initialized');
+            return;
+        }
+        this.lastShieldValue = this.player.shield.getCurrentShields();
+        this.updateShieldBarPosition();
+    }
+
+    public updateCharacterLevel(level: number) {
         this.characterLevelText.setText(`Level: ${level}`);
     }
 
-    public updateGameLevel(level: number): void {
+    public updateGameLevel(level: number) {
         this.gameLevelText.setText(`Wave: ${level}`);
     }
 
-    public destroy(): void {
-        // Clean up all UI elements
-        if (this.healthText) {
-            this.healthText.destroy();
-        }
-        if (this.characterLevelText) {
-            this.characterLevelText.destroy();
-        }
-        if (this.gameLevelText) {
-            this.gameLevelText.destroy();
-        }
-    }
-
-    public cleanup(): void {
-        try {
-            // Hide all UI elements by setting their alpha to 0
-            if (this.healthText) {
-                this.healthText.alpha = 0;
-            }
-            if (this.characterLevelText) {
-                this.characterLevelText.alpha = 0;
-            }
-            if (this.gameLevelText) {
-                this.gameLevelText.alpha = 0;
-            }
-        } catch (error) {
-            console.warn('Error during UI cleanup:', error);
-        }
+    public cleanup() {
+        this.characterLevelText.destroy();
+        this.gameLevelText.destroy();
+        this.classAvatar?.destroy();
+        this.shieldBarBackground?.destroy();
+        this.shieldBarFill?.destroy();
+        this.healthBarBackground?.destroy();
+        this.healthBarFill?.destroy();
     }
 } 

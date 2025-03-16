@@ -88,6 +88,12 @@ export default class MainScene extends Phaser.Scene {
         this.createEnemyTexture();
         this.createBulletTexture();
         this.createUnitTextures();
+        
+        // Load avatar images
+        this.load.image('heavy_avatar', 'assets/avatars/heavy.png');
+        this.load.image('light_avatar', 'assets/avatars/light_avatar.png');
+        this.load.image('assault_avatar', 'assets/avatars/assault.png');
+        this.load.image('engineer_avatar', 'assets/avatars/engineer.png');
     }
 
     private createPlayerTexture() {
@@ -202,8 +208,12 @@ export default class MainScene extends Phaser.Scene {
         // Create test units near the player's starting position
         this.createTestUnits();
 
-        // Initialize UI
-        this.ui = new UI(this);
+        // Initialize UI after player is created
+        if (!this.player) {
+            console.error('Cannot initialize UI: Player not created');
+            return;
+        }
+        this.ui = new UI(this, this.player);
         
         // Initialize minimap after UI
         this.minimap = new Minimap(this);
@@ -486,22 +496,15 @@ export default class MainScene extends Phaser.Scene {
         this.enemies.forEach(enemy => enemy.update());
         this.friendlyUnits.forEach(unit => unit.update(time));
         
+        // Update UI
+        this.ui.update();
+        
         // Update minimap
         this.minimap.update();
         
         // Check if wave is completed
         if (this.enemies.length === 0) {
             this.spawnWave();
-        }
-
-        // Automatically regenerate shield
-        if (time > this.nextDamageTime) {
-            // Apply small damage for testing
-            if (Math.random() < 0.3) { // 30% chance to take damage
-                this.player.takeDamage(10);
-                this.ui.updateHealth(this.player.getHealth());
-            }
-            this.nextDamageTime = time + this.damageInterval;
         }
     }
 

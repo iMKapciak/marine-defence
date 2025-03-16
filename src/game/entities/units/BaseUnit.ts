@@ -14,9 +14,11 @@ export abstract class BaseUnit extends Phaser.Physics.Arcade.Sprite {
     public shield!: Shield;
     protected isDead: boolean = false;
 
-    constructor(scene: MainScene, x: number, y: number, texture: string) {
+    constructor(scene: MainScene, x: number, y: number, texture: string, maxHealth: number = 100, shieldConfig?: ShieldConfig) {
         super(scene, x, y, texture);
         this.scene = scene;
+        this.maxHealth = maxHealth;
+        this.health = maxHealth;
 
         // Add to scene and enable physics
         scene.add.existing(this);
@@ -25,20 +27,32 @@ export abstract class BaseUnit extends Phaser.Physics.Arcade.Sprite {
         // Create health bar
         this.healthBar = scene.add.graphics();
         this.updateHealthBar();
+
+        // Initialize shield if config is provided
+        if (shieldConfig) {
+            this.shield = new Shield(scene, this, shieldConfig);
+        }
+
+        // Initialize weapon
+        this.initWeapon();
     }
 
     protected abstract initWeapon(): void;
-
-    public getWeapon(): Weapon {
-        return this.weapon;
-    }
 
     public getHealth(): number {
         return this.health;
     }
 
+    public getMaxHealth(): number {
+        return this.maxHealth;
+    }
+
+    public getWeapon(): Weapon {
+        return this.weapon;
+    }
+
     public shoot(targetX: number, targetY: number): void {
-        if (this.weapon && !this.isDead) {
+        if (!this.isDead && this.weapon) {
             this.weapon.shoot(targetX, targetY);
         }
     }
@@ -61,6 +75,13 @@ export abstract class BaseUnit extends Phaser.Physics.Arcade.Sprite {
         if (this.healthBar) {
             this.healthBar.destroy();
         }
+        if (this.shield) {
+            this.shield.destroy();
+        }
+        
+        // Drop a dogtag
+        const dogtag = new Dogtag(this.scene, this.x, this.y, this);
+        this.scene.addDogtag(dogtag);
     }
 
     protected updateHealthBar(): void {
@@ -78,24 +99,34 @@ export abstract class BaseUnit extends Phaser.Physics.Arcade.Sprite {
         this.healthBar.fillRect(this.x - 15, this.y - 20, healthWidth, 5);
     }
 
-    update(time: number): void {
-        if (!this.active) return;
-        this.updateHealthBar();
-    }
-
-    public destroy(fromScene?: boolean): void {
-        if (this.healthBar) {
-            this.healthBar.destroy();
-        }
-        super.destroy(fromScene);
-    }
-
     public respawn(x: number, y: number): void {
         this.isDead = false;
         this.health = this.maxHealth;
+        this.setPosition(x, y);
         this.setActive(true);
         this.setVisible(true);
-        this.setPosition(x, y);
         this.updateHealthBar();
+        if (this.shield) {
+            this.shield.reset();
+        }
+    }
+
+    update(time: number): void {
+        if (this.active) {
+            this.updateHealthBar();
+            if (this.shield) {
+                this.shield.update(time);
+            }
+        }
+    }
+
+    public destroy(): void {
+        if (this.healthBar) {
+            this.healthBar.destroy();
+        }
+        if (this.shield) {
+            this.shield.destroy();
+        }
+        super.destroy();
     }
 } 

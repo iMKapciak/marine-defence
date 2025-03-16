@@ -1,46 +1,98 @@
-import Phaser from 'phaser';
-import MainScene from '../scenes/MainScene';
-import { BaseUnit } from './units/BaseUnit';
+import { Scene } from 'phaser';
 import { PlayerClass } from '../types/PlayerData';
+import { Weapon } from '../weapons/Weapon';
 import { AssaultRifle } from '../weapons/AssaultRifle';
 import { SMG } from '../weapons/SMG';
 import { Shotgun } from '../weapons/Shotgun';
 import { Pistol } from '../weapons/Pistol';
+import { BaseUnit } from './units/BaseUnit';
+import { Shield, ShieldConfig } from './Shield';
+import MainScene from '../scenes/MainScene';
 
 export class Player extends BaseUnit {
-    private keys: { [key: string]: Phaser.Input.Keyboard.Key };
     private playerClass: PlayerClass;
+    private shieldConfig: ShieldConfig = {
+        maxShields: 100,
+        regenRate: 10,
+        regenDelay: 3000,
+        damageReduction: 1
+    };
+    private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+    private mousePointer: Phaser.Input.Pointer;
 
     constructor(scene: MainScene, x: number, y: number, playerClass: PlayerClass) {
         super(scene, x, y, 'player');
         this.playerClass = playerClass;
-
-        // Set up input keys
-        this.keys = scene.input.keyboard!.addKeys('W,A,S,D') as { [key: string]: Phaser.Input.Keyboard.Key };
-
+        
+        // Initialize input
+        if (scene.input.keyboard) {
+            this.cursors = scene.input.keyboard.createCursorKeys();
+        } else {
+            console.error('Keyboard input not available');
+        }
+        this.mousePointer = scene.input.activePointer;
+        
         // Set stats based on class
         switch (playerClass) {
             case PlayerClass.HEAVY:
-                this.maxHealth = 200;
-                this.speed = 80;
+                this.maxHealth = 150;
+                this.shieldConfig = {
+                    maxShields: 150,
+                    regenRate: 15,
+                    regenDelay: 3000,
+                    damageReduction: 0.8 // Heavy takes less damage
+                };
                 break;
             case PlayerClass.SPEEDY:
-                this.maxHealth = 100;
-                this.speed = 150;
+                this.maxHealth = 75;
+                this.shieldConfig = {
+                    maxShields: 75,
+                    regenRate: 20,
+                    regenDelay: 2500,
+                    damageReduction: 1.2 // Speedy takes more damage
+                };
                 break;
             case PlayerClass.ASSAULT:
-                this.maxHealth = 120;
-                this.speed = 100;
+                this.maxHealth = 100;
+                this.shieldConfig = {
+                    maxShields: 100,
+                    regenRate: 10,
+                    regenDelay: 3000,
+                    damageReduction: 1
+                };
                 break;
             case PlayerClass.ENGINEER:
-                this.maxHealth = 90;
-                this.speed = 120;
+                this.maxHealth = 125;
+                this.shieldConfig = {
+                    maxShields: 125,
+                    regenRate: 12,
+                    regenDelay: 2800,
+                    damageReduction: 0.9 // Engineer takes slightly less damage
+                };
                 break;
         }
+        
         this.health = this.maxHealth;
-
-        // Initialize weapon
+        this.shield = new Shield(scene, this, this.shieldConfig);
         this.initWeapon();
+        
+        // Update UI with initial values
+        if ((scene as any).ui) {
+            (scene as any).ui.updateHealth(this.health, this.maxHealth);
+            (scene as any).ui.updateShield(this.shield.getCurrentShields(), this.shield.getMaxShields());
+        }
+
+        // Set up mouse input for shooting
+        scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            if (!this.isDead) {
+                const worldPoint = pointer.positionToCamera(scene.cameras.main) as Phaser.Math.Vector2;
+                this.shoot(worldPoint.x, worldPoint.y);
+            }
+        });
+    }
+
+    public getClass(): PlayerClass {
+        return this.playerClass;
     }
 
     protected initWeapon(): void {
@@ -57,49 +109,78 @@ export class Player extends BaseUnit {
             case PlayerClass.ENGINEER:
                 this.weapon = new Pistol(this.scene, this);
                 break;
+            default:
+                this.weapon = new AssaultRifle(this.scene, this);
         }
     }
 
-    update(time: number) {
-        if (!this.active) return;
+    public takeDamage(amount: number): void {
+        if (this.isDead) return;
 
-        // Get keyboard state
-        const cursors = this.scene.input.keyboard!.createCursorKeys();
-
-        // Movement
-        let velocityX = 0;
-        let velocityY = 0;
-
-        if (this.keys.A.isDown || cursors.left.isDown) velocityX -= this.speed;
-        if (this.keys.D.isDown || cursors.right.isDown) velocityX += this.speed;
-        if (this.keys.W.isDown || cursors.up.isDown) velocityY -= this.speed;
-        if (this.keys.S.isDown || cursors.down.isDown) velocityY += this.speed;
-
-        // Normalize diagonal movement
-        if (velocityX !== 0 && velocityY !== 0) {
-            const normalizer = Math.sqrt(2) / 2;
-            velocityX *= normalizer;
-            velocityY *= normalizer;
+        // Let shield handle the damage first
+        const remainingDamage = this.shield.takeDamage(amount);
+        
+        // Any remaining damage goes to health
+        if (remainingDamage > 0) {
+            super.takeDamage(remainingDamage);
         }
-
-        this.setVelocity(velocityX, velocityY);
-
-        // Rotate player to face mouse
-        const pointer = this.scene.input.activePointer;
-        this.rotation = Phaser.Math.Angle.Between(
-            this.x, this.y,
-            pointer.x + this.scene.cameras.main.scrollX,
-            pointer.y + this.scene.cameras.main.scrollY
-        );
-
-        // Shooting
-        if (pointer.isDown) {
-            this.shoot(
-                pointer.x + this.scene.cameras.main.scrollX,
-                pointer.y + this.scene.cameras.main.scrollY
-            );
+        
+        // Update UI
+        if (this.scene instanceof MainScene && (this.scene as any).ui) {
+            (this.scene as any).ui.updateHealth(this.health);
+            (this.scene as any).ui.updateShield();
         }
+    }
 
+    update(time: number): void {
         super.update(time);
+        
+        if (!this.isDead && this.cursors) {
+            // Handle movement
+            let velocityX = 0;
+            let velocityY = 0;
+
+            if (this.cursors.left.isDown) {
+                velocityX = -this.speed;
+            } else if (this.cursors.right.isDown) {
+                velocityX = this.speed;
+            }
+
+            if (this.cursors.up.isDown) {
+                velocityY = -this.speed;
+            } else if (this.cursors.down.isDown) {
+                velocityY = this.speed;
+            }
+
+            // Normalize diagonal movement
+            if (velocityX !== 0 && velocityY !== 0) {
+                const normalizer = Math.sqrt(2) / 2;
+                velocityX *= normalizer;
+                velocityY *= normalizer;
+            }
+
+            this.setVelocity(velocityX, velocityY);
+
+            // Rotate player to face mouse cursor
+            if (this.mousePointer && this.scene) {
+                const worldPoint = this.mousePointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
+                const angle = Phaser.Math.Angle.Between(this.x, this.y, worldPoint.x, worldPoint.y);
+                this.setRotation(angle);
+            }
+
+            // Auto-shoot if mouse is held down
+            if (this.mousePointer.isDown) {
+                const worldPoint = this.mousePointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
+                this.shoot(worldPoint.x, worldPoint.y);
+            }
+        }
+        
+        // Update shield
+        this.shield.update(time);
+        
+        // Update UI with shield status
+        if (this.scene instanceof MainScene && (this.scene as any).ui) {
+            (this.scene as any).ui.updateShield();
+        }
     }
 } 

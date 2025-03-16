@@ -14,34 +14,11 @@ export default class LobbyScene extends Phaser.Scene {
     }
 
     preload() {
-        // Create placeholder images for classes
-        const graphics = this.add.graphics();
-        
-        // Heavy - Red square
-        graphics.clear();
-        graphics.fillStyle(0x8B0000);
-        graphics.fillRect(0, 0, 100, 100);
-        graphics.generateTexture('heavy', 100, 100);
-        
-        // Light - Blue square
-        graphics.clear();
-        graphics.fillStyle(0x4169E1);
-        graphics.fillRect(0, 0, 100, 100);
-        graphics.generateTexture('light', 100, 100);
-        
-        // Assault - Green square
-        graphics.clear();
-        graphics.fillStyle(0x006400);
-        graphics.fillRect(0, 0, 100, 100);
-        graphics.generateTexture('assault', 100, 100);
-        
-        // Engineer - Gold square
-        graphics.clear();
-        graphics.fillStyle(0xDAA520);
-        graphics.fillRect(0, 0, 100, 100);
-        graphics.generateTexture('engineer', 100, 100);
-        
-        graphics.destroy();
+        // Load avatar images
+        this.load.image('heavy_avatar', 'assets/avatars/heavy.png');
+        this.load.image('light_avatar', 'assets/avatars/light_avatar.png');
+        this.load.image('assault_avatar', 'assets/avatars/assault.png');
+        this.load.image('engineer_avatar', 'assets/avatars/engineer.png');
     }
 
     create() {

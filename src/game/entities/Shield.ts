@@ -15,7 +15,6 @@ export class Shield {
     private damageReduction: number;
     private lastDamageTime: number = 0;
     private scene: Phaser.Scene;
-    private shieldBar: Phaser.GameObjects.Graphics;
     private owner: Phaser.GameObjects.Sprite;
     private currentBoost: number = 0;
 
@@ -27,10 +26,6 @@ export class Shield {
         this.regenRate = config.regenRate;
         this.regenDelay = config.regenDelay;
         this.damageReduction = config.damageReduction || 1;
-
-        // Create shield bar
-        this.shieldBar = scene.add.graphics();
-        this.updateShieldBar();
     }
 
     public takeDamage(damage: number): number {
@@ -59,8 +54,6 @@ export class Shield {
             });
         }
 
-        this.updateShieldBar();
-
         // Return remaining damage
         return Math.max(0, actualDamage - absorbedDamage);
     }
@@ -74,23 +67,6 @@ export class Shield {
                 this.maxShields,
                 this.currentShields + (totalRegenRate / 60) // Convert per-second rate to per-frame
             );
-            this.updateShieldBar();
-        }
-    }
-
-    private updateShieldBar(): void {
-        this.shieldBar.clear();
-
-        // Only show shield bar if shields are not full
-        if (this.currentShields < this.maxShields) {
-            // Draw background (dark blue)
-            this.shieldBar.fillStyle(0x000066);
-            this.shieldBar.fillRect(this.owner.x - 15, this.owner.y - 25, 30, 3);
-
-            // Draw shield amount (cyan)
-            const shieldWidth = (this.currentShields / this.maxShields) * 30;
-            this.shieldBar.fillStyle(0x00ffff);
-            this.shieldBar.fillRect(this.owner.x - 15, this.owner.y - 25, shieldWidth, 3);
         }
     }
 
@@ -103,9 +79,7 @@ export class Shield {
     }
 
     public destroy(): void {
-        if (this.shieldBar) {
-            this.shieldBar.destroy();
-        }
+        // Nothing to destroy since we removed the shield bar
     }
 
     public boost(amount: number): void {
@@ -115,6 +89,5 @@ export class Shield {
     public reset(): void {
         this.currentShields = this.maxShields;
         this.lastDamageTime = 0;
-        this.updateShieldBar();
     }
 } 

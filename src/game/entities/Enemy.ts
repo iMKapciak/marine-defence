@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
 import MainScene from '../scenes/MainScene';
 import { BaseUnit } from './units/BaseUnit';
+import { Dogtag } from './Dogtag';
 
 export enum EnemyType {
-    FAST = 'fast',
-    NORMAL = 'normal',
-    HEAVY = 'heavy'
+    FAST = 'FAST',
+    NORMAL = 'NORMAL',
+    HEAVY = 'HEAVY'
 }
 
 interface EnemyStats {
@@ -20,7 +21,7 @@ interface EnemyStats {
 const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     [EnemyType.FAST]: {
         health: 30,
-        speed: 200,
+        speed: 180,
         damage: 5,
         experienceValue: 5,
         color: 0xff6666,
@@ -116,26 +117,41 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         return this.damage;
     }
 
-    public takeDamage(damage: number): void {
-        if (!this.active) {
-            console.log('Enemy is inactive, cannot take damage');
-            return;
-        }
-        
-        console.log(`Enemy taking ${damage} damage. Current health: ${this.health}`);
-        this.health = Math.max(0, this.health - damage);
+    public takeDamage(amount: number): void {
+        if (!this.active) return;
+
+        this.health = Math.max(0, this.health - amount);
         this.updateHealthBar();
-        
-        // Flash red when hit
-        this.setTint(0xff0000);
-        this.scene.time.delayedCall(100, () => {
-            if (this.active) {
-                this.clearTint();
+
+        // Show damage number
+        const damageText = this.scene.add.text(this.x, this.y - 20, amount.toString(), {
+            fontSize: '16px',
+            color: '#ff0000',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        damageText.setOrigin(0.5);
+
+        // Animate the damage number
+        this.scene.tweens.add({
+            targets: damageText,
+            y: damageText.y - 30,
+            alpha: 0,
+            duration: 800,
+            ease: 'Power2',
+            onComplete: () => {
+                damageText.destroy();
             }
         });
 
+        // Flash red when hit
+        this.setTint(0xff0000);
+        this.scene.time.delayedCall(100, () => {
+            this.clearTint();
+        });
+
         if (this.health <= 0) {
-            console.log('Enemy destroyed');
+            // Remove from scene's enemy list and destroy
             this.scene.removeEnemy(this);
             this.destroy();
         }
