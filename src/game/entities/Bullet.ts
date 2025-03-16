@@ -2,62 +2,76 @@ import Phaser from 'phaser';
 import MainScene from '../scenes/MainScene';
 
 export class Bullet extends Phaser.Physics.Arcade.Sprite {
-    public damage: number;
-    private speed: number;
-    private scene: MainScene;
+    public scene: MainScene;
+    private damage: number = 20; // Default damage
+    private speed: number = 600; // Default speed
+    private range: number = 1000; // Default range in pixels
+    private distanceTraveled: number = 0;
+    private startX: number = 0;
+    private startY: number = 0;
 
-    constructor(scene: MainScene, x: number, y: number) {
-        super(scene, x, y, 'bullet');
+    constructor(scene: MainScene, x: number, y: number, texture: string) {
+        super(scene, x, y, texture);
         this.scene = scene;
+
+        // Add to scene and enable physics
+        scene.add.existing(this);
+        scene.physics.add.existing(this);
+
+        // Set bullet properties
+        this.setScale(0.5);
         
-        // Set default values
-        this.damage = 20;
-        this.speed = 400;
-        
-        // Initialize the bullet
-        this.setActive(false);
-        this.setVisible(false);
-        
-        // Set up physics body
-        scene.physics.world.enable(this);
-        this.setCircle(3);
+        // Set up physics body size (6x6 pixels for better collision detection)
+        const body = this.body as Phaser.Physics.Arcade.Body;
+        body.setSize(6, 6);
+        body.setOffset(-3, -3);
     }
 
-    fire(x: number, y: number, angle: number) {
-        this.setActive(true);
-        this.setVisible(true);
-        this.setPosition(x, y);
-        
-        const velocity = this.scene.physics.velocityFromAngle(
-            Phaser.Math.RadToDeg(angle),
-            this.speed
-        );
-        
-        this.setVelocity(velocity.x, velocity.y);
-        return this;
+    public init(damage: number, speed: number, range: number = 1000): void {
+        this.damage = damage;
+        this.speed = speed;
+        this.range = range;
+        this.distanceTraveled = 0;
+        this.startX = this.x;
+        this.startY = this.y;
     }
 
-    getDamage(): number {
+    public fire(angle: number): void {
+        // Calculate velocity based on angle
+        const velocityX = Math.cos(angle) * this.speed;
+        const velocityY = Math.sin(angle) * this.speed;
+        this.setVelocity(velocityX, velocityY);
+        
+        // Set rotation to match direction
+        this.setRotation(angle);
+    }
+
+    public getDamage(): number {
         return this.damage;
-    }
-
-    update() {
-        if (!this.active) return;
-
-        // Get world bounds from physics
-        const bounds = this.scene.physics.world.bounds;
-        
-        // Deactivate bullets when they go outside world bounds
-        if (this.x < bounds.x || this.x > bounds.right ||
-            this.y < bounds.y || this.y > bounds.bottom) {
-            this.setActive(false);
-            this.setVisible(false);
-            this.destroy();
-        }
     }
 
     preUpdate(time: number, delta: number) {
         super.preUpdate(time, delta);
-        this.update();
+
+        // Update distance traveled
+        this.distanceTraveled = Phaser.Math.Distance.Between(
+            this.startX, this.startY,
+            this.x, this.y
+        );
+
+        // Check if bullet has exceeded its range
+        if (this.distanceTraveled >= this.range) {
+            this.setActive(false);
+            this.setVisible(false);
+            return;
+        }
+
+        // Check world bounds
+        const bounds = this.scene.physics.world.bounds;
+        if (this.x < bounds.x || this.x > bounds.right ||
+            this.y < bounds.y || this.y > bounds.bottom) {
+            this.setActive(false);
+            this.setVisible(false);
+        }
     }
 } 

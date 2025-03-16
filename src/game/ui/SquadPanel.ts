@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PlayerData, PlayerClass } from '../scenes/LobbyScene';
+import { PlayerData, PlayerClass } from '../types/PlayerData';
 
 export class SquadPanel {
     private scene: Phaser.Scene;

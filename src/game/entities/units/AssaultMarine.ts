@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import MainScene from '../../scenes/MainScene';
 import { BaseUnit } from './BaseUnit';
 import { ShieldConfig } from '../Shield';
+import { AssaultRifle } from '../../weapons/AssaultRifle';
 
 export class AssaultMarine extends BaseUnit {
     constructor(scene: MainScene, x: number, y: number) {
@@ -14,8 +15,13 @@ export class AssaultMarine extends BaseUnit {
 
         super(scene, x, y, 'marineUnit', 150, shieldConfig);
         
-        // Balanced movement speed
-        this.speed = 200;
+        this.maxHealth = 120;
+        this.health = this.maxHealth;
+        this.speed = 100; // Balanced speed
+    }
+
+    protected initWeapon(): void {
+        this.weapon = new AssaultRifle(this.scene, this);
     }
 
     update(time: number): void {

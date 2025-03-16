@@ -25,16 +25,17 @@ export default class MainScene extends Phaser.Scene {
     private nextDamageTime: number = 0;
     private damageInterval: number = 1000; // 1 second between damage tests
     private spaceKey!: Phaser.Input.Keyboard.Key;
-    private waveText: Phaser.GameObjects.Text;
+    private waveText!: Phaser.GameObjects.Text;
     
     // World bounds
     private readonly WORLD_WIDTH = 2400;
     private readonly WORLD_HEIGHT = 1800;
     private worldBounds!: Phaser.GameObjects.Graphics;
 
-    private dogtags: Phaser.Physics.Arcade.Group;
+    private dogtags!: Phaser.Physics.Arcade.Group;
     private respawningUnits: Map<BaseUnit, number> = new Map();
     private selectedPlayers: PlayerData[] = [];
+    private localPlayerId: string = '';
 
     // Add getters for minimap
     public getWorldWidth(): number {
@@ -63,8 +64,22 @@ export default class MainScene extends Phaser.Scene {
     }
 
     init(data: { players: PlayerData[] }) {
+        console.log('Initializing MainScene with data:', data);
+        
+        // Validate data
+        if (!data || !data.players || data.players.length === 0) {
+            console.error('Invalid or missing player data');
+            return;
+        }
+
         // Store selected players data
         this.selectedPlayers = data.players;
+        
+        // Store local player ID (first player is always local in single player)
+        this.localPlayerId = data.players[0].id;
+        
+        console.log('Selected players:', this.selectedPlayers);
+        console.log('Local player ID:', this.localPlayerId);
     }
 
     preload() {
@@ -113,7 +128,7 @@ export default class MainScene extends Phaser.Scene {
         graphics.lineStyle(1, 0xffff00);
         graphics.fillStyle(0xffff00);
         graphics.beginPath();
-        graphics.arc(0, 0, 3, 0, Math.PI * 2);
+        graphics.arc(4, 4, 3, 0, Math.PI * 2);
         graphics.closePath();
         graphics.fill();
         graphics.stroke();
@@ -184,22 +199,14 @@ export default class MainScene extends Phaser.Scene {
         // Create a visual boundary
         this.createWorldBoundary();
         
-        // Initialize player in the center of the world
-        this.player = new Player(this, this.WORLD_WIDTH / 2, this.WORLD_HEIGHT / 2);
-        
-        // Set up camera
-        this.cameras.main.setBounds(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
-        this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
-        this.cameras.main.setZoom(1.0); // Adjust this value to change zoom level
-        
+        // Create test units near the player's starting position
+        this.createTestUnits();
+
         // Initialize UI
         this.ui = new UI(this);
         
         // Initialize minimap after UI
         this.minimap = new Minimap(this);
-        
-        // Create test units near the player's starting position
-        this.createTestUnits();
 
         // Start spawning enemies
         this.spawnWave();
@@ -208,67 +215,60 @@ export default class MainScene extends Phaser.Scene {
         if (this.input.keyboard) {
             this.spaceKey = this.input.keyboard.addKey('SPACE');
             this.spaceKey.on('down', () => {
-                this.player.takeDamage(20);
-                this.ui.updateHealth(this.player.getHealth());
+                if (this.player) {
+                    this.player.takeDamage(20);
+                    this.ui.updateHealth(this.player.getHealth());
+                }
             });
         }
 
-        // Set up collision between bullets and enemies
-        this.physics.add.overlap(
-            this.player.bullets,
-            this.enemies,
-            (obj1, obj2) => {
-                const gameObj1 = (obj1 as Phaser.GameObjects.GameObject);
-                const gameObj2 = (obj2 as Phaser.GameObjects.GameObject);
-                
-                if (gameObj1 instanceof Bullet && gameObj2 instanceof Enemy) {
-                    this.handleBulletEnemyCollision(gameObj1, gameObj2);
-                } else if (gameObj1 instanceof Enemy && gameObj2 instanceof Bullet) {
-                    this.handleBulletEnemyCollision(gameObj2, gameObj1);
-                }
-            },
-            undefined,
-            this
-        );
+        // Set up collision between bullets and enemies only if player exists
+        if (this.player && this.player.getWeapon()) {
+            const bullets = this.player.getWeapon().getBullets();
+            if (bullets) {
+                this.physics.add.overlap(
+                    bullets,
+                    this.enemies,
+                    (obj1, obj2) => {
+                        const gameObj1 = (obj1 as Phaser.GameObjects.GameObject);
+                        const gameObj2 = (obj2 as Phaser.GameObjects.GameObject);
+                        
+                        if (gameObj1 instanceof Bullet && gameObj2 instanceof Enemy) {
+                            this.handleBulletEnemyCollision(gameObj1, gameObj2);
+                        } else if (gameObj1 instanceof Enemy && gameObj2 instanceof Bullet) {
+                            this.handleBulletEnemyCollision(gameObj2, gameObj1);
+                        }
+                    },
+                    undefined,
+                    this
+                );
+            }
+        }
 
         // Set up collisions with world bounds
-        this.player.setCollideWorldBounds(true);
+        if (this.player) {
+            this.player.setCollideWorldBounds(true);
+        }
         this.enemies.forEach(enemy => enemy.setCollideWorldBounds(true));
         this.friendlyUnits.forEach(unit => unit.setCollideWorldBounds(true));
 
         // Set up collision between enemies and player/friendly units
-        this.physics.add.overlap(
-            this.enemies,
-            this.player,
-            (obj1, obj2) => {
-                const gameObj1 = (obj1 as Phaser.GameObjects.GameObject);
-                const gameObj2 = (obj2 as Phaser.GameObjects.GameObject);
-                
-                if (gameObj1 instanceof Enemy && gameObj2 instanceof Player) {
-                    this.handleEnemyCollision(gameObj1, gameObj2);
-                }
-            },
-            undefined,
-            this
-        );
-
-        // Set up collision between enemies and friendly units
-        this.friendlyUnits.forEach(unit => {
+        if (this.player) {
             this.physics.add.overlap(
                 this.enemies,
-                unit,
+                this.player,
                 (obj1, obj2) => {
                     const gameObj1 = (obj1 as Phaser.GameObjects.GameObject);
                     const gameObj2 = (obj2 as Phaser.GameObjects.GameObject);
                     
-                    if (gameObj1 instanceof Enemy && gameObj2 instanceof BaseUnit) {
+                    if (gameObj1 instanceof Enemy && gameObj2 instanceof Player) {
                         this.handleEnemyCollision(gameObj1, gameObj2);
                     }
                 },
                 undefined,
                 this
             );
-        });
+        }
 
         // Add wave text
         this.waveText = this.add.text(16, 16, `Wave: ${this.wave}`, {
@@ -280,17 +280,19 @@ export default class MainScene extends Phaser.Scene {
         this.dogtags = this.physics.add.group();
 
         // Add collision between player and dogtags
-        this.physics.add.overlap(
-            this.player,
-            this.dogtags,
-            (player, dogtag) => {
-                if (dogtag instanceof Dogtag) {
-                    dogtag.collect();
-                }
-            },
-            undefined,
-            this
-        );
+        if (this.player) {
+            this.physics.add.overlap(
+                this.player,
+                this.dogtags,
+                (player, dogtag) => {
+                    if (dogtag instanceof Dogtag) {
+                        dogtag.collect();
+                    }
+                },
+                undefined,
+                this
+            );
+        }
     }
 
     private createWorldBoundary() {
@@ -335,31 +337,16 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-    private handleEnemyCollision(enemy: Enemy, target: Player | BaseUnit) {
-        if (!enemy.active || !target.active) return;
-        
-        // Check if enough time has passed since last damage
+    private handleEnemyCollision(enemy: Enemy, target: BaseUnit | Player) {
         const now = this.time.now;
-        if (!enemy.lastDamageTime || now > enemy.lastDamageTime + enemy.damageInterval) {
-            // Apply damage to target
-            const damage = enemy.getDamageAmount();
-            target.takeDamage(damage);
-            
-            // Update UI if player was damaged
-            if (target instanceof Player) {
-                this.ui.updateHealth(target.getHealth());
-            }
-            
-            // Update last damage time
-            enemy.lastDamageTime = now;
-            
-            // Visual feedback
-            target.setTint(0xff0000);
-            this.time.delayedCall(100, () => {
-                if (target.active) {
-                    target.clearTint();
-                }
-            });
+        if (now < enemy.lastDamageTime + enemy.damageInterval) return;
+
+        enemy.lastDamageTime = now;
+        target.takeDamage(enemy.getDamageAmount());
+
+        // Update UI if player was damaged
+        if (target instanceof Player) {
+            this.ui.updateHealth(target.getHealth());
         }
     }
 
@@ -402,15 +389,40 @@ export default class MainScene extends Phaser.Scene {
         const centerX = this.WORLD_WIDTH / 2;
         const centerY = this.WORLD_HEIGHT / 2;
         
+        // Ensure we have selected players
+        if (!this.selectedPlayers || this.selectedPlayers.length === 0) {
+            console.error('No players selected');
+            return;
+        }
+
         // Create units based on player selections
-        this.selectedPlayers.forEach((player, index) => {
+        this.selectedPlayers.forEach((playerData, index) => {
             let unit: BaseUnit;
             const offset = 100; // Space between units
             const angle = (index / this.selectedPlayers.length) * Math.PI * 2; // Distribute units in a circle
             const x = centerX + Math.cos(angle) * offset;
             const y = centerY + Math.sin(angle) * offset;
 
-            switch (player.class) {
+            // If this is the local player, create a Player instance
+            if (playerData.id === this.localPlayerId) {
+                console.log('Creating player with class:', playerData.class);
+                this.player = new Player(this, x, y, playerData.class);
+                this.player.setActive(true);
+                this.player.setVisible(true);
+                this.cameras.main.setBounds(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
+                this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+                this.cameras.main.setZoom(1.0);
+                console.log('Player initialized:', {
+                    active: this.player.active,
+                    visible: this.player.visible,
+                    x: this.player.x,
+                    y: this.player.y,
+                    class: playerData.class
+                });
+                return;
+            }
+
+            switch (playerData.class) {
                 case PlayerClass.HEAVY:
                     unit = new HeavyShieldUnit(this, x, y);
                     break;
@@ -424,7 +436,7 @@ export default class MainScene extends Phaser.Scene {
                     unit = new SupportEngineer(this, x, y);
                     break;
                 default:
-                    console.warn(`Unknown player class: ${player.class}`);
+                    console.warn(`Unknown player class: ${playerData.class}`);
                     return;
             }
 
@@ -434,15 +446,43 @@ export default class MainScene extends Phaser.Scene {
             // Make sure unit stays within world bounds
             unit.setCollideWorldBounds(true);
         });
+
+        // Log player creation status
+        if (!this.player) {
+            console.error('Player was not created');
+        } else {
+            console.log('Player created successfully');
+        }
     }
 
     update(time: number) {
-        if (!this.player.active) {
-            this.gameOver();
+        // Check if player exists and is properly initialized
+        if (!this.player) {
+            console.warn('Player not yet initialized');
             return;
         }
 
-        this.player.update();
+        // Check if player is dead
+        if (!this.player.active && this.player.scene === this) {
+            console.log('Player died:', {
+                playerActive: this.player.active,
+                playerHealth: this.player.getHealth()
+            });
+            
+            // Check if all friendly units are also dead and no respawns are pending
+            const allUnitsDead = this.friendlyUnits.every(unit => !unit.active);
+            const hasActiveDogtags = this.dogtags.getChildren().length > 0;
+            
+            // Only trigger game over if both player and all units are dead AND there are no dogtags
+            if (allUnitsDead && !hasActiveDogtags) {
+                console.log('Game over condition met - all units dead and no dogtags');
+                this.gameOver();
+                return;
+            }
+        }
+
+        // Rest of update logic
+        this.player.update(time);
         this.enemies.forEach(enemy => enemy.update());
         this.friendlyUnits.forEach(unit => unit.update(time));
         
@@ -462,15 +502,6 @@ export default class MainScene extends Phaser.Scene {
                 this.ui.updateHealth(this.player.getHealth());
             }
             this.nextDamageTime = time + this.damageInterval;
-        }
-
-        // Check if all friendly units are dead and no respawns are pending
-        const allUnitsDead = this.friendlyUnits.every(unit => !unit.active);
-        const hasActiveDogtags = this.dogtags.getChildren().length > 0;
-        
-        // Only trigger game over if all units are dead AND there are no dogtags (collected or not)
-        if (allUnitsDead && !hasActiveDogtags) {
-            this.gameOver();
         }
     }
 
@@ -507,6 +538,8 @@ export default class MainScene extends Phaser.Scene {
         const index = this.enemies.indexOf(enemy);
         if (index > -1) {
             this.enemies.splice(index, 1);
+            
+            // Add experience when enemy is killed
             this.addExperience(enemy.getExperienceValue());
         }
     }

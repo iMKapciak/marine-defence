@@ -102,8 +102,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.scene.add.existing(this);
         this.scene.physics.add.existing(this);
         
-        // Set the size for physics body
-        this.setCircle(10);
+        // Set the size for physics body based on enemy type
+        const stats = ENEMY_STATS[this.enemyType];
+        const size = stats.size * 2; // Double the size for better collision detection
+        this.setCircle(size);
         
         // Make sure the sprite is active
         this.setActive(true);

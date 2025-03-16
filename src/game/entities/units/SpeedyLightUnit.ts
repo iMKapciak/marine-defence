@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import MainScene from '../../scenes/MainScene';
 import { BaseUnit } from './BaseUnit';
 import { ShieldConfig } from '../Shield';
+import { SMG } from '../../weapons/SMG';
 
 export class SpeedyLightUnit extends BaseUnit {
     constructor(scene: MainScene, x: number, y: number) {
@@ -15,7 +16,11 @@ export class SpeedyLightUnit extends BaseUnit {
         super(scene, x, y, 'speedyUnit', 100, shieldConfig);
 
         // Faster movement speed
-        this.speed = 300;
+        this.speed = 150;
+    }
+
+    protected initWeapon(): void {
+        this.weapon = new SMG(this.scene, this);
     }
 
     update(time: number): void {

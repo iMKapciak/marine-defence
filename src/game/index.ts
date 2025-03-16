@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
-import { gameConfig } from './config';
+import config from './config';
 
 window.addEventListener('load', () => {
     try {
-        const game = new Phaser.Game(gameConfig);
+        const game = new Phaser.Game(config);
         console.log('Game initialized successfully');
         
         // Add error handling for WebGL context loss

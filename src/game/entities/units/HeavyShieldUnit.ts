@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import MainScene from '../../scenes/MainScene';
 import { BaseUnit } from './BaseUnit';
 import { ShieldConfig } from '../Shield';
+import { Shotgun } from '../../weapons/Shotgun';
 
 export class HeavyShieldUnit extends BaseUnit {
     constructor(scene: MainScene, x: number, y: number) {
@@ -15,7 +16,11 @@ export class HeavyShieldUnit extends BaseUnit {
         super(scene, x, y, 'heavyUnit', 200, shieldConfig);
         
         // Slower movement speed
-        this.speed = 150;
+        this.speed = 80; // Slower due to heavy armor
+    }
+
+    protected initWeapon(): void {
+        this.weapon = new Shotgun(this.scene, this);
     }
 
     update(time: number): void {

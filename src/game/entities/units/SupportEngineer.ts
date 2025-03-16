@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import MainScene from '../../scenes/MainScene';
 import { BaseUnit } from './BaseUnit';
 import { ShieldConfig } from '../Shield';
+import { Pistol } from '../../weapons/Pistol';
 
 export class SupportEngineer extends BaseUnit {
     private shieldBoosterRange: number = 150;
@@ -19,14 +20,21 @@ export class SupportEngineer extends BaseUnit {
             damageReduction: 1 // Normal damage
         };
 
-        super(scene, x, y, 'engineerUnit', 120, shieldConfig);
+        super(scene, x, y, 'engineerUnit');
         this.mainScene = scene;
+        this.maxHealth = 90;
+        this.health = this.maxHealth;
+        this.speed = 120; // Above average speed
 
         // Create visual indicator for boost range
         this.boostVisual = scene.add.graphics()
             .setScrollFactor(0)
             .setDepth(50);
         this.updateBoostVisual();
+    }
+
+    protected initWeapon(): void {
+        this.weapon = new Pistol(this.scene, this);
     }
 
     private updateBoostVisual(): void {

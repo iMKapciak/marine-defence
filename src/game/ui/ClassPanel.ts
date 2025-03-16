@@ -6,192 +6,222 @@ interface ClassInfo {
     description: string;
     color: number;
     weapons: string[];
+    avatar: string;
 }
 
-export class ClassPanel {
-    private scene: Phaser.Scene;
-    private x: number;
-    private y: number;
-    private selectedClass: PlayerClass = PlayerClass.ASSAULT;
-    private classButtons: Map<PlayerClass, Phaser.GameObjects.Container> = new Map();
-    private descriptionText: Phaser.GameObjects.Text;
-    private weaponsList: Phaser.GameObjects.Text;
-    private readyButton: Phaser.GameObjects.Container;
+export class ClassPanel extends Phaser.GameObjects.Container {
+    private selectedClass: PlayerClass | null = null;
     private isReady: boolean = false;
+    private classButtons: Map<PlayerClass, Phaser.GameObjects.Container> = new Map();
+    private readyButton: Phaser.GameObjects.Container;
+    private onClassSelect: (playerClass: PlayerClass) => void;
+    private onReadyToggle: (isReady: boolean) => void;
 
-    private readonly PANEL_WIDTH = 300;
-    private readonly PANEL_HEIGHT = 500;
-    private readonly BUTTON_HEIGHT = 60;
-    private readonly BUTTON_WIDTH = 280;
-    private readonly BUTTON_PADDING = 10;
+    private readonly PANEL_WIDTH = 400;
+    private readonly PANEL_HEIGHT = 600;
+    private readonly BUTTON_WIDTH = 180;
+    private readonly BUTTON_HEIGHT = 220;
+    private readonly BUTTON_SPACING = 20;
 
-    private readonly CLASS_INFO: Record<PlayerClass, ClassInfo> = {
-        [PlayerClass.HEAVY]: {
+    private readonly CLASS_INFO: ClassInfo[] = [
+        {
             name: PlayerClass.HEAVY,
-            description: 'Heavy weapons specialist with strong defense',
-            color: 0x0000ff,
-            weapons: ['Heavy Machine Gun', 'Rocket Launcher', 'Shield Generator']
+            description: 'Heavy armored unit with powerful weapons\nbut slower movement',
+            color: 0x8B0000,
+            weapons: ['Minigun', 'Rocket Launcher'],
+            avatar: 'heavy'
         },
-        [PlayerClass.SPEEDY]: {
+        {
             name: PlayerClass.SPEEDY,
-            description: 'Fast-moving scout with light weapons',
-            color: 0xffff00,
-            weapons: ['SMG', 'Pistol', 'Smoke Grenades']
+            description: 'Fast and agile unit with light weapons\nand high mobility',
+            color: 0x4169E1,
+            weapons: ['SMG', 'Pistol'],
+            avatar: 'light'
         },
-        [PlayerClass.ASSAULT]: {
+        {
             name: PlayerClass.ASSAULT,
-            description: 'Balanced fighter with medium weapons',
-            color: 0x00ff00,
-            weapons: ['Assault Rifle', 'Shotgun', 'Frag Grenades']
+            description: 'Balanced unit with medium armor\nand versatile weapons',
+            color: 0x006400,
+            weapons: ['Assault Rifle', 'Grenades'],
+            avatar: 'assault'
         },
-        [PlayerClass.ENGINEER]: {
+        {
             name: PlayerClass.ENGINEER,
-            description: 'Support specialist with utility abilities',
-            color: 0x00ffff,
-            weapons: ['Combat Rifle', 'Repair Tool', 'Turret']
+            description: 'Support unit that can repair allies\nand deploy turrets',
+            color: 0xDAA520,
+            weapons: ['Repair Tool', 'Shotgun'],
+            avatar: 'engineer'
         }
-    };
+    ];
 
-    constructor(scene: Phaser.Scene, x: number, y: number) {
-        this.scene = scene;
-        this.x = x;
-        this.y = y;
+    constructor(scene: Phaser.Scene, x: number, y: number, onClassSelect: (playerClass: PlayerClass) => void, onReadyToggle: (isReady: boolean) => void) {
+        super(scene, x, y);
+        this.onClassSelect = onClassSelect;
+        this.onReadyToggle = onReadyToggle;
 
-        this.createBackground();
-        this.createClassButtons();
-        this.createDescriptionPanel();
-        this.createReadyButton();
-
-        // Set initial class
-        this.selectClass(this.selectedClass);
-    }
-
-    private createBackground() {
-        // Create panel background
-        this.scene.add.rectangle(
-            this.x,
-            this.y,
-            this.PANEL_WIDTH,
-            this.PANEL_HEIGHT,
-            0x333333,
-            0.8
-        ).setOrigin(0, 0);
+        // Add panel background
+        const background = scene.add.rectangle(0, 0, this.PANEL_WIDTH, this.PANEL_HEIGHT, 0x000033);
+        background.setStrokeStyle(2, 0x3333cc);
+        background.setOrigin(0.5);
+        this.add(background);
 
         // Add title
-        this.scene.add.text(
-            this.x + this.PANEL_WIDTH / 2,
-            this.y + 20,
-            'Class Selection',
-            {
-                fontSize: '24px',
-                color: '#ffffff'
-            }
-        ).setOrigin(0.5);
-    }
-
-    private createClassButtons() {
-        Object.values(PlayerClass).forEach((className, index) => {
-            const button = this.createClassButton(
-                this.x + this.PANEL_WIDTH / 2,
-                this.y + 80 + index * (this.BUTTON_HEIGHT + this.BUTTON_PADDING),
-                className
-            );
-            this.classButtons.set(className, button);
-        });
-    }
-
-    private createClassButton(x: number, y: number, className: PlayerClass): Phaser.GameObjects.Container {
-        const container = this.scene.add.container(x, y);
-        const info = this.CLASS_INFO[className];
-
-        const button = this.scene.add.rectangle(0, 0, this.BUTTON_WIDTH, this.BUTTON_HEIGHT, info.color, 0.8)
-            .setInteractive()
-            .on('pointerdown', () => this.selectClass(className));
-
-        const text = this.scene.add.text(0, 0, className, {
-            fontSize: '20px',
+        const title = scene.add.text(0, -this.PANEL_HEIGHT/2 + 20, 'SELECT YOUR CLASS', {
+            fontSize: '24px',
+            fontFamily: 'Arial',
             color: '#ffffff'
         }).setOrigin(0.5);
+        this.add(title);
 
-        container.add([button, text]);
+        // Create class buttons in a 2x2 grid
+        const startX = -this.BUTTON_WIDTH/2 - this.BUTTON_SPACING/2;
+        const startY = -this.BUTTON_HEIGHT/2;
+        
+        this.CLASS_INFO.forEach((classInfo, index) => {
+            const row = Math.floor(index / 2);
+            const col = index % 2;
+            const x = startX + col * (this.BUTTON_WIDTH + this.BUTTON_SPACING);
+            const y = startY + row * (this.BUTTON_HEIGHT + this.BUTTON_SPACING);
+            
+            const button = this.createClassButton(classInfo, x, y);
+            this.classButtons.set(classInfo.name, button);
+            this.add(button);
+        });
+
+        // Add ready button at the bottom
+        this.readyButton = this.createReadyButton(0, this.PANEL_HEIGHT/2 - 50);
+        this.add(this.readyButton);
+
+        scene.add.existing(this);
+    }
+
+    private createClassButton(classInfo: ClassInfo, x: number, y: number): Phaser.GameObjects.Container {
+        const container = new Phaser.GameObjects.Container(this.scene, x, y);
+
+        // Button background
+        const background = this.scene.add.rectangle(0, 0, this.BUTTON_WIDTH, this.BUTTON_HEIGHT, 0x1a1a1a);
+        background.setStrokeStyle(2, classInfo.color);
+        container.add(background);
+
+        // Add class avatar
+        const avatar = this.scene.add.image(0, -this.BUTTON_HEIGHT/4, classInfo.avatar);
+        avatar.setDisplaySize(this.BUTTON_WIDTH - 20, this.BUTTON_HEIGHT/2);
+        container.add(avatar);
+
+        // Class name
+        const name = this.scene.add.text(0, -this.BUTTON_HEIGHT/2 + 20, classInfo.name, {
+            fontSize: '18px',
+            fontFamily: 'Arial',
+            color: '#ffffff'
+        }).setOrigin(0.5);
+        container.add(name);
+
+        // Class description
+        const description = this.scene.add.text(0, this.BUTTON_HEIGHT/4, classInfo.description, {
+            fontSize: '12px',
+            fontFamily: 'Arial',
+            color: '#cccccc',
+            align: 'center',
+            wordWrap: { width: this.BUTTON_WIDTH - 20 }
+        }).setOrigin(0.5);
+        container.add(description);
+
+        // Make button interactive
+        background.setInteractive({ useHandCursor: true })
+            .on('pointerover', () => {
+                background.setStrokeStyle(3, 0xffffff);
+            })
+            .on('pointerout', () => {
+                background.setStrokeStyle(2, this.selectedClass === classInfo.name ? 0xffff00 : classInfo.color);
+            })
+            .on('pointerdown', () => {
+                this.selectClass(classInfo.name);
+            });
+
         return container;
     }
 
-    private createDescriptionPanel() {
-        const descY = this.y + 350;
-        
-        this.descriptionText = this.scene.add.text(
-            this.x + 10,
-            descY,
-            '',
-            {
-                fontSize: '16px',
-                color: '#ffffff',
-                wordWrap: { width: this.PANEL_WIDTH - 20 }
-            }
-        );
+    private createReadyButton(x: number, y: number): Phaser.GameObjects.Container {
+        const container = new Phaser.GameObjects.Container(this.scene, x, y);
 
-        this.weaponsList = this.scene.add.text(
-            this.x + 10,
-            descY + 60,
-            '',
-            {
-                fontSize: '14px',
-                color: '#aaaaaa',
-                wordWrap: { width: this.PANEL_WIDTH - 20 }
-            }
-        );
-    }
+        // Button background
+        const background = this.scene.add.rectangle(0, 0, 200, 50, 0x1a1a1a);
+        background.setStrokeStyle(2, 0x666666);
+        container.add(background);
 
-    private createReadyButton() {
-        const y = this.y + this.PANEL_HEIGHT - 50;
-        this.readyButton = this.scene.add.container(this.x + this.PANEL_WIDTH / 2, y);
-
-        const button = this.scene.add.rectangle(0, 0, 200, 40, 0xff0000)
-            .setInteractive()
-            .on('pointerdown', () => this.toggleReady());
-
-        const text = this.scene.add.text(0, 0, 'Ready', {
+        // Button text
+        const text = this.scene.add.text(0, 0, 'READY', {
             fontSize: '20px',
-            color: '#ffffff'
+            fontFamily: 'Arial',
+            color: '#666666'
         }).setOrigin(0.5);
+        container.add(text);
 
-        this.readyButton.add([button, text]);
+        // Make button interactive
+        background.setInteractive({ useHandCursor: true })
+            .on('pointerover', () => {
+                if (this.selectedClass) {
+                    background.setStrokeStyle(3, this.isReady ? 0xff0000 : 0x00ff00);
+                }
+            })
+            .on('pointerout', () => {
+                background.setStrokeStyle(2, this.isReady ? 0x00ff00 : 0x666666);
+            })
+            .on('pointerdown', () => {
+                if (this.selectedClass) {
+                    this.toggleReady();
+                }
+            });
+
+        return container;
     }
 
-    private selectClass(className: PlayerClass) {
-        // Update button visuals
-        this.classButtons.forEach((button, buttonClass) => {
-            const info = this.CLASS_INFO[buttonClass];
-            const alpha = buttonClass === className ? 1 : 0.8;
-            (button.list[0] as Phaser.GameObjects.Rectangle).setAlpha(alpha);
-        });
+    private selectClass(playerClass: PlayerClass): void {
+        // Reset previous selection
+        if (this.selectedClass) {
+            const prevButton = this.classButtons.get(this.selectedClass);
+            const prevBackground = prevButton?.getAt(0) as Phaser.GameObjects.Rectangle;
+            prevBackground?.setStrokeStyle(2, this.CLASS_INFO.find(c => c.name === this.selectedClass)?.color || 0xffffff);
+        }
 
-        // Update selected class
-        this.selectedClass = className;
-        const info = this.CLASS_INFO[className];
+        // Set new selection
+        this.selectedClass = playerClass;
+        const button = this.classButtons.get(playerClass);
+        const background = button?.getAt(0) as Phaser.GameObjects.Rectangle;
+        background?.setStrokeStyle(2, 0xffff00);
 
-        // Update description
-        this.descriptionText.setText(info.description);
-        this.weaponsList.setText(['Available Weapons:', ...info.weapons].join('\n'));
+        // Update ready button state
+        const readyBackground = this.readyButton.getAt(0) as Phaser.GameObjects.Rectangle;
+        const readyText = this.readyButton.getAt(1) as Phaser.GameObjects.Text;
+        readyBackground.setStrokeStyle(2, 0x666666);
+        readyText.setColor('#ffffff');
 
-        // Emit class selection event
-        this.scene.events.emit('classSelected', className);
+        this.onClassSelect(playerClass);
     }
 
-    private toggleReady() {
+    private toggleReady(): void {
+        if (!this.selectedClass) return;
+
         this.isReady = !this.isReady;
-        const button = this.readyButton.list[0] as Phaser.GameObjects.Rectangle;
-        const text = this.readyButton.list[1] as Phaser.GameObjects.Text;
+        const readyBackground = this.readyButton.getAt(0) as Phaser.GameObjects.Rectangle;
+        const readyText = this.readyButton.getAt(1) as Phaser.GameObjects.Text;
 
-        button.setFillStyle(this.isReady ? 0x00ff00 : 0xff0000);
-        text.setText(this.isReady ? 'Ready!' : 'Ready');
+        if (this.isReady) {
+            readyBackground.setStrokeStyle(2, 0x00ff00);
+            readyText.setText('READY!');
+            readyText.setColor('#00ff00');
+        } else {
+            readyBackground.setStrokeStyle(2, 0x666666);
+            readyText.setText('READY');
+            readyText.setColor('#ffffff');
+        }
 
-        // Emit ready status change event
-        this.scene.events.emit('readyToggled');
+        this.onReadyToggle(this.isReady);
     }
 
-    public update() {
-        // Add any necessary update logic here
+    public setReady(isReady: boolean): void {
+        if (this.isReady !== isReady) {
+            this.toggleReady();
+        }
     }
 } 

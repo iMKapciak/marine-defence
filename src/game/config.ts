@@ -1,18 +1,19 @@
 import Phaser from 'phaser';
-import MainScene from './scenes/MainScene';
-import { LobbyScene } from './scenes/LobbyScene';
+import LobbyScene from './scenes/LobbyScene.ts';
+import MainScene from './scenes/MainScene.ts';
 
-export const gameConfig: Phaser.Types.Core.GameConfig = {
+const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
+    width: 1600,
+    height: 900,
     physics: {
         default: 'arcade',
         arcade: {
             gravity: { x: 0, y: 0 },
-            debug: true // Enable debug mode temporarily to see physics bodies
+            debug: false
         }
     },
-    scene: [LobbyScene, MainScene],
-    backgroundColor: '#000033'
-}; 
+    scene: [LobbyScene, MainScene]
+};
+
+export default config; 
