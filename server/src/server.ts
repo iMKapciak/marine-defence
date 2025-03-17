@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
-import { PlayerData, PlayerClass } from '../../src/game/types/PlayerData';
+import { PlayerData, PlayerClass } from './types/PlayerData';
 
 const app = express();
 const httpServer = createServer(app);
