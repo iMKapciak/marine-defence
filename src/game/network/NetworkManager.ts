@@ -1,4 +1,4 @@
-import { Socket, io } from 'socket.io-client';
+import { io, Socket as SocketType } from 'socket.io-client';
 import { PlayerClass } from '../types/PlayerData';
 
 interface ChatMessageData {
@@ -7,7 +7,7 @@ interface ChatMessageData {
 }
 
 export class NetworkManager {
-    private socket: Socket;
+    private socket: SocketType;
     private gameStartCallback: (() => void) | null = null;
     private playerJoinedCallback: ((data: any) => void) | null = null;
     private playerLeftCallback: ((data: any) => void) | null = null;
