@@ -6,22 +6,31 @@ import { PlayerData, PlayerClass } from './types/PlayerData';
 
 const app = express();
 const httpServer = createServer(app);
+
+// Configure CORS for both Express and Socket.IO
+app.use(cors({
+    origin: '*', // Allow all origins in development
+    methods: ['GET', 'POST'],
+    credentials: true
+}));
+
 const io = new Server(httpServer, {
     cors: {
-        origin: process.env.CLIENT_URL || 'http://localhost:3000',
-        methods: ['GET', 'POST']
-    }
+        origin: '*', // Allow all origins in development
+        methods: ['GET', 'POST'],
+        credentials: true
+    },
+    transports: ['websocket', 'polling'] // Enable both WebSocket and polling
 });
 
 // Store connected players
 const players = new Map<string, PlayerData>();
 
-app.use(cors());
 app.use(express.json());
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 io.on('connection', (socket) => {
@@ -29,12 +38,14 @@ io.on('connection', (socket) => {
 
     // Handle player joining
     socket.on('player:join', (playerData: PlayerData) => {
+        console.log('Player joined:', playerData);
         players.set(socket.id, playerData);
         io.emit('player:list', Array.from(players.values()));
     });
 
     // Handle player ready status
     socket.on('player:ready', (isReady: boolean) => {
+        console.log('Player ready status changed:', socket.id, isReady);
         const player = players.get(socket.id);
         if (player) {
             player.isReady = isReady;
@@ -44,6 +55,7 @@ io.on('connection', (socket) => {
 
     // Handle player class selection
     socket.on('player:class', (playerClass: PlayerClass) => {
+        console.log('Player class selected:', socket.id, playerClass);
         const player = players.get(socket.id);
         if (player) {
             player.class = playerClass;

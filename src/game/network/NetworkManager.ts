@@ -1,5 +1,5 @@
-import { io, Socket as SocketType } from 'socket.io-client';
-import { PlayerClass } from '../types/PlayerData';
+import { io, Socket } from 'socket.io-client';
+import { PlayerClass, PlayerData } from '../types/PlayerData';
 
 interface ChatMessageData {
     playerId: string;
@@ -7,24 +7,27 @@ interface ChatMessageData {
 }
 
 export class NetworkManager {
-    private socket: SocketType;
+    private socket: Socket;
     private gameStartCallback: (() => void) | null = null;
     private playerJoinedCallback: ((data: any) => void) | null = null;
     private playerLeftCallback: ((data: any) => void) | null = null;
     private playerUpdateCallback: ((data: any) => void) | null = null;
     private gameStateUpdateCallback: ((data: any) => void) | null = null;
     private chatMessageCallback: ((data: ChatMessageData) => void) | null = null;
+    private reconnectAttempts: number = 0;
+    private maxReconnectAttempts: number = 5;
 
     constructor() {
-        const serverUrl = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3001';
+        const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
         console.log('🌐 Attempting to connect to server:', serverUrl);
         
         this.socket = io(serverUrl, {
-            transports: ['websocket'],
+            transports: ['websocket', 'polling'],
             autoConnect: true,
             reconnection: true,
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000
+            reconnectionAttempts: this.maxReconnectAttempts,
+            reconnectionDelay: 1000,
+            timeout: 10000
         });
         
         this.setupConnectionListeners();
@@ -34,14 +37,22 @@ export class NetworkManager {
     private setupConnectionListeners() {
         this.socket.on('connect', () => {
             console.log('✅ Connected to server successfully! Socket ID:', this.socket.id);
+            this.reconnectAttempts = 0;
         });
 
         this.socket.on('connect_error', (error: Error) => {
             console.error('❌ Connection error:', error.message);
-            console.log('🔄 Attempting to reconnect...');
+            this.reconnectAttempts++;
+            
+            if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+                console.log('🔄 Maximum reconnection attempts reached, trying polling transport...');
+                this.socket.io.opts.transports = ['polling', 'websocket'];
+            } else {
+                console.log(`🔄 Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+            }
         });
 
-        this.socket.on('disconnect', (reason: string) => {
+        this.socket.on('disconnect', (reason) => {
             console.log('🔌 Disconnected from server. Reason:', reason);
         });
 
@@ -62,20 +73,16 @@ export class NetworkManager {
         // Implementation of setupEventListeners method
     }
 
-    // Test method to verify connection
-    public testConnection() {
-        if (this.socket.connected) {
-            console.log('✅ Currently connected to server');
-            return true;
-        } else {
-            console.log('❌ Not connected to server');
-            return false;
-        }
+    public testConnection(): boolean {
+        return this.socket.connected;
     }
 
-    // Method to manually attempt reconnection
-    public reconnect() {
+    public reconnect(): void {
         console.log('🔄 Manually attempting to reconnect...');
         this.socket.connect();
+    }
+
+    public disconnect(): void {
+        this.socket.disconnect();
     }
 } 
