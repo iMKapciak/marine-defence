@@ -19,6 +19,12 @@ export class Player extends BaseUnit {
     };
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private mousePointer: Phaser.Input.Pointer;
+    private wasdKeys!: {
+        W: Phaser.Input.Keyboard.Key;
+        S: Phaser.Input.Keyboard.Key;
+        A: Phaser.Input.Keyboard.Key;
+        D: Phaser.Input.Keyboard.Key;
+    };
 
     constructor(scene: MainScene, x: number, y: number, playerClass: PlayerClass) {
         super(scene, x, y, 'player');
@@ -27,6 +33,12 @@ export class Player extends BaseUnit {
         // Initialize input
         if (scene.input.keyboard) {
             this.cursors = scene.input.keyboard.createCursorKeys();
+            this.wasdKeys = {
+                W: scene.input.keyboard.addKey('W'),
+                S: scene.input.keyboard.addKey('S'),
+                A: scene.input.keyboard.addKey('A'),
+                D: scene.input.keyboard.addKey('D')
+            };
         } else {
             console.error('Keyboard input not available');
         }
@@ -135,20 +147,20 @@ export class Player extends BaseUnit {
     update(time: number): void {
         super.update(time);
         
-        if (!this.isDead && this.cursors) {
+        if (!this.isDead && this.wasdKeys) {
             // Handle movement
             let velocityX = 0;
             let velocityY = 0;
 
-            if (this.cursors.left.isDown) {
+            if (this.wasdKeys.A.isDown) {
                 velocityX = -this.speed;
-            } else if (this.cursors.right.isDown) {
+            } else if (this.wasdKeys.D.isDown) {
                 velocityX = this.speed;
             }
 
-            if (this.cursors.up.isDown) {
+            if (this.wasdKeys.W.isDown) {
                 velocityY = -this.speed;
-            } else if (this.cursors.down.isDown) {
+            } else if (this.wasdKeys.S.isDown) {
                 velocityY = this.speed;
             }
 
