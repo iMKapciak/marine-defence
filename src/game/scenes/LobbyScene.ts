@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ClassPanel } from '../ui/ClassPanel';
 import { PlayerClass, PlayerData } from '../types/PlayerData';
+import { NetworkManager } from '../network/NetworkManager';
 
 export default class LobbyScene extends Phaser.Scene {
     private players: Map<string, PlayerData> = new Map();
@@ -8,6 +9,7 @@ export default class LobbyScene extends Phaser.Scene {
     private countdownText!: Phaser.GameObjects.Text;
     private countdownTimer?: Phaser.Time.TimerEvent;
     private startCountdown: number = 5; // Countdown time in seconds
+    private networkManager!: NetworkManager;
 
     constructor() {
         super({ key: 'LobbyScene' });
@@ -22,6 +24,10 @@ export default class LobbyScene extends Phaser.Scene {
     }
 
     create() {
+        // Initialize network manager
+        this.networkManager = new NetworkManager();
+        console.log('🎮 Network manager initialized in LobbyScene');
+
         // Set background
         const background = this.add.rectangle(0, 0, this.cameras.main.width, this.cameras.main.height, 0x000022);
         background.setOrigin(0, 0);
@@ -60,6 +66,24 @@ export default class LobbyScene extends Phaser.Scene {
             (playerClass: PlayerClass) => this.handleClassSelect(localPlayer.id, playerClass),
             (isReady: boolean) => this.handleReadyToggle(localPlayer.id, isReady)
         );
+
+        // Add connection status text
+        const connectionStatus = this.add.text(10, 10, '', {
+            fontSize: '16px',
+            fontFamily: 'Arial',
+            color: '#00ff00'
+        });
+
+        // Update connection status periodically
+        this.time.addEvent({
+            delay: 2000,
+            callback: () => {
+                const isConnected = this.networkManager.testConnection();
+                connectionStatus.setText(isConnected ? '🟢 Connected' : '🔴 Disconnected');
+                connectionStatus.setColor(isConnected ? '#00ff00' : '#ff0000');
+            },
+            loop: true
+        });
 
         // Add countdown text (hidden initially)
         this.countdownText = this.add.text(this.cameras.main.centerX, 150, '', {
