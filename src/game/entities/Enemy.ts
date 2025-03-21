@@ -120,11 +120,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     public takeDamage(amount: number): void {
         if (!this.active) return;
 
+        console.log('[Enemy] Taking damage:', amount);
         this.health = Math.max(0, this.health - amount);
         this.updateHealthBar();
 
         // Show damage number
-        const damageText = this.scene.add.text(this.x, this.y - 20, amount.toString(), {
+        const damageText = this.scene.add.text(this.x, this.y - 20, Math.round(amount).toString(), {
             fontSize: '16px',
             color: '#ff0000',
             stroke: '#000000',

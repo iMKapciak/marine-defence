@@ -90,4 +90,11 @@ export class Shield {
         this.currentShields = this.maxShields;
         this.lastDamageTime = 0;
     }
+
+    public updateMaxShields(newMaxShields: number): void {
+        console.log('[Shield] Updating max shields to:', newMaxShields);
+        const ratio = this.currentShields / this.maxShields;
+        this.maxShields = newMaxShields;
+        this.currentShields = Math.floor(ratio * newMaxShields);
+    }
 } 

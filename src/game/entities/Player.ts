@@ -1,6 +1,6 @@
 import { Scene } from 'phaser';
 import { PlayerClass } from '../types/PlayerData';
-import { Weapon } from '../weapons/Weapon';
+import { Weapon, WeaponStats } from '../weapons/Weapon';
 import { AssaultRifle } from '../weapons/AssaultRifle';
 import { SMG } from '../weapons/SMG';
 import { Shotgun } from '../weapons/Shotgun';
@@ -8,6 +8,7 @@ import { Pistol } from '../weapons/Pistol';
 import { BaseUnit } from './units/BaseUnit';
 import { Shield, ShieldConfig } from './Shield';
 import MainScene from '../scenes/MainScene';
+import { socket } from '../../services/socket';
 
 export class Player extends BaseUnit {
     private playerClass: PlayerClass;
@@ -30,47 +31,45 @@ export class Player extends BaseUnit {
         super(scene, x, y, 'player');
         this.playerClass = playerClass;
         
-        // Initialize input
-        if (scene.input.keyboard) {
-            this.cursors = scene.input.keyboard.createCursorKeys();
+        // Set up input
+        if (scene.input && scene.input.keyboard) {
             this.wasdKeys = {
                 W: scene.input.keyboard.addKey('W'),
                 S: scene.input.keyboard.addKey('S'),
                 A: scene.input.keyboard.addKey('A'),
                 D: scene.input.keyboard.addKey('D')
             };
-        } else {
-            console.error('Keyboard input not available');
         }
+
         this.mousePointer = scene.input.activePointer;
         
-        // Set stats based on class
+        // Set up class-specific attributes
         switch (playerClass) {
             case PlayerClass.HEAVY:
-                this.maxHealth = 150;
+                this.maxHealth = 200;
                 this.shieldConfig = {
                     maxShields: 150,
-                    regenRate: 15,
-                    regenDelay: 3000,
-                    damageReduction: 0.8 // Heavy takes less damage
+                    regenRate: 8,
+                    regenDelay: 3500,
+                    damageReduction: 0.8 // Heavy takes 20% less damage
                 };
                 break;
             case PlayerClass.SPEEDY:
-                this.maxHealth = 75;
+                this.maxHealth = 100;
                 this.shieldConfig = {
                     maxShields: 75,
-                    regenRate: 20,
+                    regenRate: 15,
                     regenDelay: 2500,
-                    damageReduction: 1.2 // Speedy takes more damage
+                    damageReduction: 1
                 };
                 break;
             case PlayerClass.ASSAULT:
-                this.maxHealth = 100;
+                this.maxHealth = 150;
                 this.shieldConfig = {
                     maxShields: 100,
                     regenRate: 10,
                     regenDelay: 3000,
-                    damageReduction: 1
+                    damageReduction: 0.9 // Assault takes 10% less damage
                 };
                 break;
             case PlayerClass.ENGINEER:
@@ -86,7 +85,21 @@ export class Player extends BaseUnit {
         
         this.health = this.maxHealth;
         this.shield = new Shield(scene, this, this.shieldConfig);
+
+        // Initialize weapon first
         this.initWeapon();
+
+        // Get current weapon stats
+        const currentWeaponStats = this.weapon?.getStats() || this.getDefaultWeaponStats();
+        console.log('[Player] Current weapon stats:', currentWeaponStats);
+
+        // Store initial attributes in registry based on current weapon stats
+        scene.game.registry.set('playerAttributes', {
+            damagePerShot: currentWeaponStats.damage,
+            fireRate: 1000 / currentWeaponStats.fireRate, // Convert from ms between shots to shots per second
+            movementSpeed: this.speed / 20, // Convert from game units to attribute units
+            shieldAmount: this.shieldConfig.maxShields
+        });
         
         // Update UI with initial values
         if ((scene as any).ui) {
@@ -101,6 +114,70 @@ export class Player extends BaseUnit {
                 this.shoot(worldPoint.x, worldPoint.y);
             }
         });
+
+        // Listen for attribute upgrades
+        socket.on('player:attributeUpgraded', (data: { attribute: string, newValue: number }) => {
+            console.log('[Player] Attribute upgraded:', data);
+            this.handleAttributeUpgrade(data.attribute, data.newValue);
+        });
+    }
+
+    private getDefaultWeaponStats(): WeaponStats {
+        switch (this.playerClass) {
+            case PlayerClass.HEAVY:
+                return { ...Shotgun.DEFAULT_STATS };
+            case PlayerClass.SPEEDY:
+                return { ...SMG.DEFAULT_STATS };
+            case PlayerClass.ASSAULT:
+                return { ...AssaultRifle.DEFAULT_STATS };
+            case PlayerClass.ENGINEER:
+                return { ...Pistol.DEFAULT_STATS };
+            default:
+                return { ...AssaultRifle.DEFAULT_STATS };
+        }
+    }
+
+    public handleAttributeUpgrade(attribute: string, newValue: number): void {
+        console.log('[Player] Handling attribute upgrade:', attribute, 'to', newValue);
+        this.updateAttributes(attribute, newValue);
+    }
+
+    private updateAttributes(attribute: string, newValue: number) {
+        console.log('[Player] Updating attribute:', attribute, 'to', newValue);
+        switch (attribute) {
+            case 'damagePerShot':
+                if (this.weapon) {
+                    console.log('[Player] Updating weapon damage:', {
+                        currentDamage: this.weapon.getDamage(),
+                        newDamage: newValue
+                    });
+                    this.weapon.updateDamage(newValue);
+                    // Verify the update
+                    const updatedDamage = this.weapon.getDamage();
+                    console.log('[Player] Weapon damage after update:', updatedDamage);
+                    if (updatedDamage !== newValue) {
+                        console.error('[Player] Damage update failed! Expected:', newValue, 'Got:', updatedDamage);
+                    }
+                } else {
+                    console.warn('[Player] No weapon found to update damage');
+                }
+                break;
+            case 'fireRate':
+                if (this.weapon) {
+                    // Convert fireRate value to milliseconds between shots
+                    const fireRateMs = 1000 / newValue;
+                    this.weapon.updateFireRate(fireRateMs);
+                }
+                break;
+            case 'movementSpeed':
+                this.speed = newValue * 20; // Scale the speed appropriately
+                break;
+            case 'shieldAmount':
+                if (this.shield) {
+                    this.shield.updateMaxShields(newValue);
+                }
+                break;
+        }
     }
 
     public getClass(): PlayerClass {
@@ -108,6 +185,9 @@ export class Player extends BaseUnit {
     }
 
     protected initWeapon(): void {
+        console.log('[Player] Initializing weapon for class:', this.playerClass);
+        
+        // Create weapon instance based on class
         switch (this.playerClass) {
             case PlayerClass.HEAVY:
                 this.weapon = new Shotgun(this.scene, this);
@@ -124,6 +204,22 @@ export class Player extends BaseUnit {
             default:
                 this.weapon = new AssaultRifle(this.scene, this);
         }
+
+        if (!this.weapon) {
+            console.error('[Player] Failed to create weapon');
+            return;
+        }
+
+        // Get any existing attributes from registry
+        const attributes = (this.scene as any).game.registry.get('playerAttributes');
+        if (attributes) {
+            console.log('[Player] Found existing attributes:', attributes);
+            this.weapon.updateDamage(attributes.damagePerShot);
+            const fireRateMs = 1000 / attributes.fireRate;
+            this.weapon.updateFireRate(fireRateMs);
+        }
+
+        console.log('[Player] Weapon initialized with damage:', this.weapon.getDamage());
     }
 
     public takeDamage(amount: number): void {

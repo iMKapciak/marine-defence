@@ -52,7 +52,7 @@ export default class LobbyScene extends Phaser.Scene {
         const localPlayer: PlayerData = {
             id: 'player1',
             name: 'Player 1',
-            class: PlayerClass.ASSAULT, // Set default class
+            class: null as unknown as PlayerClass, // Start with no class selected
             isReady: false,
             isHost: true
         };
@@ -122,8 +122,13 @@ export default class LobbyScene extends Phaser.Scene {
     private handleClassSelect(playerId: string, playerClass: PlayerClass) {
         const player = this.players.get(playerId);
         if (player) {
+            console.log(`[LobbyScene] Updating player ${playerId} class to:`, playerClass);
             player.class = playerClass;
+            this.players.set(playerId, player); // Update the map
+            console.log('[LobbyScene] Updated player data:', player);
             this.checkGameStart();
+        } else {
+            console.error(`[LobbyScene] Could not find player with ID: ${playerId}`);
         }
     }
 
@@ -171,20 +176,24 @@ export default class LobbyScene extends Phaser.Scene {
     private startGame() {
         const readyPlayers = Array.from(this.players.values()).filter(p => p.isReady && p.class !== null);
         
-        console.log('Starting game with players:', readyPlayers);
+        console.log('[LobbyScene] Starting game with players:', readyPlayers);
         
         if (readyPlayers.length > 0) {
-            // Ensure at least one player has a class selected
-            if (!readyPlayers.some(p => p.class !== null)) {
-                console.error('No players have selected a class');
+            // Ensure at least one player has a valid class selected
+            if (!readyPlayers.some(p => p.class !== null && Object.values(PlayerClass).includes(p.class))) {
+                console.error('[LobbyScene] No players have a valid class selected');
                 return;
             }
+
+            console.log('[LobbyScene] Starting MainScene with player data:', {
+                players: readyPlayers
+            });
 
             this.scene.start('MainScene', {
                 players: readyPlayers
             });
         } else {
-            console.error('No ready players to start the game');
+            console.error('[LobbyScene] No ready players to start the game');
         }
     }
 } 

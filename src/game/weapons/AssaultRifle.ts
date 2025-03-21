@@ -4,7 +4,7 @@ import { BaseUnit } from '../entities/units/BaseUnit';
 import { Bullet } from '../entities/Bullet';
 
 export class AssaultRifle extends Weapon {
-    private static readonly DEFAULT_STATS: WeaponStats = {
+    public static readonly DEFAULT_STATS: WeaponStats = {
         damage: 35,
         speed: 800,
         range: 800,
@@ -28,10 +28,11 @@ export class AssaultRifle extends Weapon {
 
         const bullet = this.bullets.get(this.owner.x, this.owner.y, 'bullet') as Bullet;
         if (bullet) {
-            bullet.init(this.stats.damage, this.stats.speed, this.stats.range);
+            bullet.init(this.getDamage(), this.stats.speed, this.stats.range, this);
             bullet.setActive(true);
             bullet.setVisible(true);
             bullet.fire(finalAngle);
+            console.log('[AssaultRifle] Fired bullet with damage:', this.getDamage());
         }
     }
 } 

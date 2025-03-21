@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import LobbyScene from './scenes/LobbyScene.ts';
 import MainScene from './scenes/MainScene.ts';
+import { LevelingScene } from './scenes/LevelingScene.tsx';
 
 const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
@@ -13,7 +14,7 @@ const config: Phaser.Types.Core.GameConfig = {
             debug: false
         }
     },
-    scene: [LobbyScene, MainScene]
+    scene: [LobbyScene, MainScene, LevelingScene]
 };
 
 export default config; 

@@ -1,17 +1,19 @@
 import Phaser from 'phaser';
 import MainScene from '../scenes/MainScene';
+import { Weapon } from '../weapons/Weapon';
 
 export class Bullet extends Phaser.Physics.Arcade.Sprite {
     public scene: MainScene;
-    private damage: number = 20; // Default damage
     private speed: number = 600; // Default speed
     private range: number = 1000; // Default range in pixels
     private distanceTraveled: number = 0;
     private startX: number = 0;
     private startY: number = 0;
+    private sourceWeapon: Weapon | null = null;
+    private damage: number = 0;
 
     constructor(scene: MainScene, x: number, y: number, texture: string) {
-        super(scene, x, y, texture);
+        super(scene, x, y, 'bullet'); // Always use 'bullet' texture
         this.scene = scene;
 
         // Add to scene and enable physics
@@ -27,13 +29,23 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
         body.setOffset(-3, -3);
     }
 
-    public init(damage: number, speed: number, range: number = 1000): void {
+    public init(damage: number, speed: number, range: number = 1000, weapon: Weapon): void {
+        console.log('[Bullet] Initializing with damage:', damage);
         this.damage = damage;
         this.speed = speed;
         this.range = range;
         this.distanceTraveled = 0;
         this.startX = this.x;
         this.startY = this.y;
+        this.sourceWeapon = weapon;
+        
+        // Verify initialization
+        console.log('[Bullet] Initialized:', {
+            storedDamage: this.damage,
+            weaponDamage: this.sourceWeapon.getDamage(),
+            speed: this.speed,
+            range: this.range
+        });
     }
 
     public fire(angle: number): void {
@@ -46,8 +58,29 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
         this.setRotation(angle);
     }
 
+    public getSourceWeapon(): Weapon | null {
+        return this.sourceWeapon;
+    }
+
     public getDamage(): number {
-        return this.damage;
+        // Always get the current damage from the source weapon
+        if (!this.sourceWeapon) {
+            console.warn('[Bullet] No source weapon found for bullet, using stored damage:', this.damage);
+            return this.damage;
+        }
+
+        // Get the current weapon damage
+        const weaponDamage = this.sourceWeapon.getDamage();
+        const finalDamage = weaponDamage;
+
+        console.log('[Bullet] Getting damage:', {
+            storedDamage: this.damage,
+            weaponDamage,
+            finalDamage,
+            weaponStats: this.sourceWeapon.getStats()
+        });
+
+        return finalDamage;
     }
 
     preUpdate(time: number, delta: number) {

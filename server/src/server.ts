@@ -3,6 +3,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { PlayerData, PlayerClass } from './types/PlayerData';
+import { LevelingService } from './services/LevelingService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -62,8 +63,54 @@ io.on('connection', (socket) => {
     // Handle player joining
     socket.on('player:join', (playerData: PlayerData) => {
         console.log('Player joined:', playerData);
-        players.set(socket.id, playerData);
+        // Initialize level data for new player
+        const playerWithLevelData = LevelingService.initializePlayerLevelData(playerData);
+        players.set(socket.id, playerWithLevelData);
         io.emit('player:list', Array.from(players.values()));
+    });
+
+    // Handle experience gain
+    socket.on('player:gainExperience', (xpAmount: number) => {
+        const player = players.get(socket.id);
+        if (player) {
+            const updatedPlayer = LevelingService.addExperience(player, xpAmount);
+            players.set(socket.id, updatedPlayer);
+            
+            // If player leveled up, notify them
+            if (updatedPlayer.levelData.availableAttributePoints > player.levelData.availableAttributePoints) {
+                socket.emit('player:levelUp', {
+                    newLevel: updatedPlayer.levelData.currentLevel,
+                    availablePoints: updatedPlayer.levelData.availableAttributePoints
+                });
+            }
+            
+            // Update all players with the new player data
+            io.emit('player:list', Array.from(players.values()));
+        }
+    });
+
+    // Handle attribute upgrade
+    socket.on('player:upgradeAttribute', (data: { attribute: keyof PlayerData['levelData']['attributes'], amount?: number }) => {
+        const player = players.get(socket.id);
+        if (player) {
+            try {
+                const updatedPlayer = LevelingService.upgradeAttribute(player, data.attribute, data.amount);
+                players.set(socket.id, updatedPlayer);
+                
+                // Notify the player of successful upgrade
+                socket.emit('player:attributeUpgraded', {
+                    attribute: data.attribute,
+                    newValue: updatedPlayer.levelData.attributes[data.attribute],
+                    remainingPoints: updatedPlayer.levelData.availableAttributePoints
+                });
+                
+                // Update all players with the new player data
+                io.emit('player:list', Array.from(players.values()));
+            } catch (error: any) {
+                // Notify the player of the error
+                socket.emit('player:upgradeError', { message: error.message });
+            }
+        }
     });
 
     // Handle player ready status

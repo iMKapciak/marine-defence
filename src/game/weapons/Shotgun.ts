@@ -4,7 +4,7 @@ import { BaseUnit } from '../entities/units/BaseUnit';
 import { Bullet } from '../entities/Bullet';
 
 export class Shotgun extends Weapon {
-    private static readonly DEFAULT_STATS: WeaponStats = {
+    public static readonly DEFAULT_STATS: WeaponStats = {
         damage: 15,
         speed: 500,
         range: 300,
@@ -31,11 +31,12 @@ export class Shotgun extends Weapon {
             const bullet = this.bullets.get(this.owner.x, this.owner.y, 'bullet') as Bullet;
             if (bullet) {
                 const projectileAngle = startAngle + (angleStep * i);
-                bullet.init(this.stats.damage, this.stats.speed, this.stats.range);
+                bullet.init(this.getDamage(), this.stats.speed, this.stats.range, this);
                 bullet.setActive(true);
                 bullet.setVisible(true);
                 bullet.fire(projectileAngle);
             }
         }
+        console.log('[Shotgun] Fired bullets with damage:', this.getDamage());
     }
 } 

@@ -11,6 +11,7 @@ import { Bullet } from '../entities/Bullet';
 import { Minimap } from '../ui/Minimap';
 import { Dogtag } from '../entities/Dogtag';
 import { PlayerData, PlayerClass } from '../types/PlayerData';
+import { socket } from '../../services/socket';
 
 export default class MainScene extends Phaser.Scene {
     public player!: Player;
@@ -200,12 +201,17 @@ export default class MainScene extends Phaser.Scene {
 
     create() {
         // Set up the world bounds
+        this.worldBounds = this.add.graphics();
+        this.worldBounds.lineStyle(2, 0x00ff00);
+        this.worldBounds.strokeRect(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
+
+        // Set up physics world bounds
         this.physics.world.setBounds(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
-        
-        // Create a visual boundary
-        this.createWorldBoundary();
-        
-        // Create test units near the player's starting position
+
+        // Set up camera
+        this.cameras.main.setBounds(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
+
+        // Create test units (including player) first
         this.createTestUnits();
 
         // Initialize UI after player is created
@@ -214,23 +220,34 @@ export default class MainScene extends Phaser.Scene {
             return;
         }
         this.ui = new UI(this, this.player);
-        
+
         // Initialize minimap after UI
         this.minimap = new Minimap(this);
 
-        // Start spawning enemies
-        this.spawnWave();
+        // Create dogtags group
+        this.dogtags = this.physics.add.group({
+            classType: Dogtag,
+            runChildUpdate: true
+        });
 
-        // Add test key for damage
-        if (this.input.keyboard) {
-            this.spaceKey = this.input.keyboard.addKey('SPACE');
-            this.spaceKey.on('down', () => {
-                if (this.player) {
-                    this.player.takeDamage(20);
-                    this.ui.updateHealth(this.player.getHealth());
-                }
-            });
-        }
+        // Listen for attribute upgrades
+        socket.on('player:attributeUpgraded', (data: { attribute: string, newValue: number }) => {
+            console.log('[MainScene] Received attribute upgrade:', data);
+            
+            // Get current attributes from registry or initialize new object
+            const attributes = this.game.registry.get('playerAttributes') || {};
+            
+            // Update the specific attribute
+            attributes[data.attribute] = data.newValue;
+            
+            // Store updated attributes back in registry
+            this.game.registry.set('playerAttributes', attributes);
+            
+            // Update player if it exists
+            if (this.player) {
+                this.player.handleAttributeUpgrade(data.attribute, data.newValue);
+            }
+        });
 
         // Set up collision between bullets and enemies only if player exists
         if (this.player && this.player.getWeapon()) {
@@ -255,12 +272,19 @@ export default class MainScene extends Phaser.Scene {
             }
         }
 
-        // Set up collisions with world bounds
-        if (this.player) {
-            this.player.setCollideWorldBounds(true);
+        // Start spawning enemies
+        this.spawnWave();
+
+        // Add test key for damage
+        if (this.input.keyboard) {
+            this.spaceKey = this.input.keyboard.addKey('SPACE');
+            this.spaceKey.on('down', () => {
+                if (this.player) {
+                    this.player.takeDamage(20);
+                    this.ui.updateHealth(this.player.getHealth());
+                }
+            });
         }
-        this.enemies.forEach(enemy => enemy.setCollideWorldBounds(true));
-        this.friendlyUnits.forEach(unit => unit.setCollideWorldBounds(true));
 
         // Set up collision between enemies and player/friendly units
         if (this.player) {
@@ -286,9 +310,6 @@ export default class MainScene extends Phaser.Scene {
             color: '#fff'
         });
 
-        // Create dogtags group
-        this.dogtags = this.physics.add.group();
-
         // Add collision between player and dogtags
         if (this.player) {
             this.physics.add.overlap(
@@ -305,45 +326,24 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-    private createWorldBoundary() {
-        // Create a graphics object for the world boundary
-        this.worldBounds = this.add.graphics();
-        
-        // Style for the boundary
-        this.worldBounds.lineStyle(4, 0x00ff00, 0.8); // Green border
-        
-        // Draw the rectangle
-        this.worldBounds.strokeRect(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
-        
-        // Add some grid lines for reference
-        this.worldBounds.lineStyle(1, 0x00ff00, 0.3);
-        
-        // Vertical lines
-        for (let x = 0; x < this.WORLD_WIDTH; x += 200) {
-            this.worldBounds.lineBetween(x, 0, x, this.WORLD_HEIGHT);
-        }
-        
-        // Horizontal lines
-        for (let y = 0; y < this.WORLD_HEIGHT; y += 200) {
-            this.worldBounds.lineBetween(0, y, this.WORLD_WIDTH, y);
-        }
-    }
-
     private handleBulletEnemyCollision(bullet: Bullet, enemy: Enemy): void {
         if (!bullet?.active || !enemy?.active) {
-            console.log('Bullet or enemy is inactive');
+            console.log('[MainScene] Bullet or enemy is inactive');
             return;
         }
 
-        console.log('Applying damage to enemy');
+        console.log('[MainScene] Handling bullet-enemy collision');
         
         try {
             const damage = bullet.getDamage();
+            const sourceWeapon = bullet.getSourceWeapon();
+            console.log('[MainScene] Bullet damage:', damage, 'from weapon:', sourceWeapon?.constructor.name);
+            
             enemy.takeDamage(damage);
             bullet.setActive(false);
             bullet.setVisible(false);
         } catch (error) {
-            console.error('Error in bullet-enemy collision:', error);
+            console.error('[MainScene] Error in bullet-enemy collision:', error);
         }
     }
 
@@ -515,25 +515,24 @@ export default class MainScene extends Phaser.Scene {
         while (this.characterExperience >= this.experienceToNextLevel) {
             this.characterExperience -= this.experienceToNextLevel;
             this.characterLevel++;
+            
+            // Increase experience required for next level
             this.experienceToNextLevel = Math.floor(this.experienceToNextLevel * 1.5);
             
-            // Update UI
-            this.ui.updateCharacterLevel(this.characterLevel);
+            console.log('[MainScene] Level up! New level:', this.characterLevel);
             
-            // Could add level up effects here
-            const levelUpText = this.add.text(this.player.x, this.player.y - 50, 'Level Up!', {
-                fontSize: '32px',
-                color: '#ffff00'
-            });
-            
-            this.tweens.add({
-                targets: levelUpText,
-                y: levelUpText.y - 100,
-                alpha: 0,
-                duration: 2000,
-                ease: 'Power2',
-                onComplete: () => levelUpText.destroy()
-            });
+            // Start the LevelingScene
+            if (!this.scene.isActive('LevelingScene')) {
+                console.log('[MainScene] Starting LevelingScene');
+                this.scene.launch('LevelingScene');
+                this.scene.bringToTop('LevelingScene');
+            }
+        }
+
+        // Update UI
+        if (this.ui) {
+            this.ui.updateExperience(this.characterExperience, this.experienceToNextLevel);
+            this.ui.updateLevel(this.characterLevel);
         }
     }
 

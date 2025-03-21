@@ -150,6 +150,16 @@ export class UI {
         this.gameLevelText.setText(`Wave: ${level}`);
     }
 
+    // Alias for updateCharacterLevel to match the MainScene's call
+    public updateLevel(level: number) {
+        this.updateCharacterLevel(level);
+    }
+
+    public updateExperience(current: number, total: number) {
+        // For now, we don't show experience progress
+        // You can add an experience bar here if needed
+    }
+
     public cleanup() {
         this.characterLevelText.destroy();
         this.gameLevelText.destroy();
